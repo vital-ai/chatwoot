@@ -58,7 +58,7 @@ class User < ApplicationRecord
          :validatable,
          :confirmable,
          :password_has_required_content,
-         :omniauthable, omniauth_providers: [:google_oauth2]
+         :omniauthable, omniauth_providers: [:keycloak_openid]
 
   # TODO: remove in a future version once online status is moved to account users
   # remove the column availability from users
@@ -67,6 +67,15 @@ class User < ApplicationRecord
   # The validation below has been commented out as it does not
   # work because :validatable in devise overrides this.
   # validates_uniqueness_of :email, scope: :account_id
+
+
+  # NEW
+  include DeviseTokenAuth::Concerns::User
+
+  # Validate presence/uniqueness if you wish
+  validates :provider, presence: true
+  validates :uid,      presence: true, uniqueness: { scope: :provider }
+  # END NEW
 
   validates :email, presence: true
 
@@ -100,7 +109,9 @@ class User < ApplicationRecord
   has_many :macros, foreign_key: 'created_by_id', inverse_of: :created_by
   # rubocop:enable Rails/HasManyOrHasOneDependent
 
-  before_validation :set_password_and_uid, on: :create
+  # before_validation :set_password_and_uid, on: :create
+  before_validation :set_password_and_uid, on: :create, if: -> { provider == 'email' }
+
   after_destroy :remove_macros
 
   scope :order_by_full_name, -> { order('lower(name) ASC') }
@@ -113,8 +124,17 @@ class User < ApplicationRecord
     devise_mailer.with(account: Current.account).send(notification, self, *).deliver_later
   end
 
-  def set_password_and_uid
-    self.uid = email
+  def self.from_omniauth(auth)
+    user = find_or_initialize_by(provider: auth.provider, uid: auth.uid)
+
+    if user.new_record?
+      user.email    = auth.info.email
+      user.name     = auth.info.name
+      user.password = Devise.friendly_token[0, 20]
+      user.save!
+    end
+
+    user
   end
 
   def assigned_inboxes

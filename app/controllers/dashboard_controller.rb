@@ -1,6 +1,10 @@
 class DashboardController < ActionController::Base
   include SwitchLocale
 
+  # Check for auth failures first, before redirect_to_keycloak
+  before_action :check_auth_failure
+  before_action :redirect_to_keycloak, only: [:index]
+  
   before_action :set_application_pack
   before_action :set_global_config
   before_action :set_dashboard_scripts
@@ -13,6 +17,73 @@ class DashboardController < ActionController::Base
   def index; end
 
   private
+
+  # New method to check for auth failures before redirect_to_keycloak
+  def check_auth_failure
+    # Check for auth failure indicators in params or session
+    auth_failed = params[:auth_failed].present? || 
+                 params[:error].present? || 
+                 params[:auth_failure].present? || 
+                 (defined?(session) && session[:auth_failed])
+    
+    if auth_failed
+      Rails.logger.info "Auth failure detected: #{params[:auth_failed] || params[:error] || params[:auth_failure]}"
+      # Store in session for persistence across redirects
+      session[:auth_failed] = true if defined?(session)
+      
+      # This will prevent infinite redirects on auth failure
+      @skip_keycloak_redirect = true
+    end
+  end
+
+  def redirect_to_keycloak
+    # Do not redirect if the user is already in the omniauth flow
+    # or if the user is already in the auth flow
+    return if request.path.include?('/auth/') || 
+             request.path.include?('/users/auth/') || 
+             request.path.include?('/users/confirmation') ||
+             request.path.include?('/api/')
+    
+    # Skip redirect if auth failure was detected
+    if @skip_keycloak_redirect
+      Rails.logger.info "Skipping Keycloak redirect due to auth failure flag"
+      
+      # Clear the auth_failed flag after using it
+      session[:auth_failed] = nil if defined?(session)
+      
+      # Explicitly ensure all required variables are set before rendering
+      # This prevents NoMethodError and ArgumentError in the layout
+      set_global_config if @global_config.nil?
+      set_application_pack if @application_pack.nil?
+      
+      # For auth failure/login pages, we should use the v3app pack
+      @application_pack = 'v3app' if request.path.include?('/login')
+      
+      # Render the index page directly
+      return render :index
+    end
+    
+    Rails.logger.info "Redirecting unauthenticated user to Keycloak: #{request.path}"
+
+    # Create a form that posts to the OmniAuth path instead of redirecting
+    # This is necessary because OmniAuth might be expecting a POST request
+    render html: <<~HTML.html_safe
+      <html>
+        <body>
+          <form id="keycloak_form" method="post" action="/auth/keycloak_openid">
+            <input type="hidden" name="resource_class" value="User">
+            <input type="hidden" name="authenticity_token" value="#{form_authenticity_token}">
+            <noscript>
+              <button type="submit">Continue to Keycloak</button>
+            </noscript>
+          </form>
+          <script>
+            document.getElementById('keycloak_form').submit();
+          </script>
+        </body>
+      </html>
+    HTML
+  end
 
   def ensure_html_format
     render json: { error: 'Please use API routes instead of dashboard routes for JSON requests' }, status: :not_acceptable if request.format.json?

@@ -1052,7 +1052,7 @@ ActiveRecord::Schema[7.1].define(version: 2025_06_27_195529) do
   end
 
   create_table "users", id: :serial, force: :cascade do |t|
-    t.string "provider", default: "email", null: false
+    t.string "provider", default: "keycloak", null: false
     t.string "uid", default: "", null: false
     t.string "encrypted_password", default: "", null: false
     t.string "reset_password_token"

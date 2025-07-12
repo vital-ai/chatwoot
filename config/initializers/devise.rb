@@ -271,4 +271,42 @@ Devise.setup do |config|
   # When using OmniAuth, Devise cannot automatically set OmniAuth path,
   # so you need to do it manually. For the users scope, it would be:
   # config.omniauth_path_prefix = '/my_engine/users/auth'
+
+  config.omniauth_path_prefix = '/auth'
+  
+  # Use hardcoded internal URL for backend connections
+  # This is the URL that the Rails container will use to connect to Keycloak
+  # Browser redirects are handled separately in omniauth_keycloak.rb
+  # Define redirect_uri for consistency
+  # Hardcoded to ensure exact match with Keycloak client configuration
+  redirect_uri = 'http://localhost:3000/auth/keycloak_openid/callback'
+  Rails.logger.info("[Devise OmniAuth] Setting redirect_uri to: #{redirect_uri}")
+  
+  # Log Keycloak client details for debugging
+  Rails.logger.info("[Devise OmniAuth] Keycloak client_id: #{ENV.fetch('KEYCLOAK_CLIENT_ID')}")
+  Rails.logger.info("[Devise OmniAuth] Keycloak realm: #{ENV.fetch('KEYCLOAK_REALM')}")
+  Rails.logger.info("[Devise OmniAuth] Keycloak server URL: http://host.docker.internal:8085")
+  
+  config.omniauth :keycloak_openid,
+  ENV.fetch('KEYCLOAK_CLIENT_ID'),
+  ENV.fetch('KEYCLOAK_CLIENT_SECRET'),
+  client_options: {
+    site:            'http://host.docker.internal:8085',
+    realm:           ENV.fetch('KEYCLOAK_REALM'),
+    # For Keycloak 17+ (Quarkus), set base_url to empty string to remove /auth prefix
+    base_url:        '',
+    authorize_url:   '/realms/' + ENV.fetch('KEYCLOAK_REALM') + '/protocol/openid-connect/auth',
+    token_url:       '/realms/' + ENV.fetch('KEYCLOAK_REALM') + '/protocol/openid-connect/token',
+    user_info_url:   '/realms/' + ENV.fetch('KEYCLOAK_REALM') + '/protocol/openid-connect/userinfo'
+  },
+  # Critical for newer Keycloak: explicitly set discovery path to avoid /auth prefix
+  discovery: true, 
+  discovery_path: "http://host.docker.internal:8085/realms/#{ENV.fetch('KEYCLOAK_REALM')}/.well-known/openid-configuration",
+  # Explicitly set redirect_uri to ensure consistency
+  redirect_uri: redirect_uri,
+  # Use transport_method: :query to send parameters in query string instead of body
+  transport_method: :query,
+  name: 'keycloak_openid',
+  provider_ignores_state: true
+
 end

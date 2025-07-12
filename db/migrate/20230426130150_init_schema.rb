@@ -785,7 +785,7 @@ class InitSchema < ActiveRecord::Migration[6.1]
       t.datetime "updated_at", precision: nil, null: false
     end
     create_table "users", id: :serial do |t|
-      t.string "provider", default: "email", null: false
+      t.string "provider", default: "keycloak", null: false
       t.string "uid", default: "", null: false
       t.string "encrypted_password", default: "", null: false
       t.string "reset_password_token"

@@ -5,7 +5,12 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
   before_action :process_sso_auth_token, only: [:create]
 
   def new
-    redirect_to login_page_url(error: 'access-denied')
+    Rails.logger.info "SessionsController#new called. Request path: #{request.path}, Referrer: #{request.referrer}"
+    Rails.logger.info "Request parameters: #{params.inspect}"
+    Rails.logger.info "OmniAuth env: #{request.env['omniauth.auth'].inspect if request.env['omniauth.auth']}"
+    Rails.logger.info "OmniAuth error: #{request.env['omniauth.error'].inspect if request.env['omniauth.error']}"
+    
+    redirect_to login_page_url(error: 'access-denied'), allow_other_host: true
   end
 
   def create
