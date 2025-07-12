@@ -44,15 +44,24 @@ class DashboardController < ActionController::Base
     Rails.logger.info "Current controller: #{self.class.name}, action: #{action_name}"
     Rails.logger.info "Request format: #{request.format}"
     Rails.logger.info "Session ID: #{request.session.id}" if defined?(request.session)
+    Rails.logger.info "Request params: #{params.inspect}"
+    Rails.logger.info "Request env omniauth.auth: #{request.env['omniauth.auth'].inspect}" if request.env['omniauth.auth']
+    Rails.logger.info "Request env omniauth.origin: #{request.env['omniauth.origin']}" if request.env['omniauth.origin']
     Rails.logger.info "============================================"
     
-    # Do not redirect if the user is already in the omniauth flow
-    # or if the user is already in the auth flow
+    # Do not redirect if we're in a callback or auth flow
     if request.path.include?('/auth/') || 
        request.path.include?('/users/auth/') || 
        request.path.include?('/users/confirmation') ||
-       request.path.include?('/api/')
-      Rails.logger.info "SKIPPING REDIRECT: Path includes auth or API path"
+       request.path.include?('/api/') ||
+       # These are additional OAuth callback indicators:
+       request.env['omniauth.auth'].present? ||
+       request.env['omniauth.origin'].present? ||
+       params[:code].present? || 
+       params[:provider].present? ||
+       params[:origin].present?
+       
+      Rails.logger.info "SKIPPING REDIRECT: Path includes auth or API path, or has OAuth callback indicators"
       return
     end
     
@@ -83,9 +92,17 @@ class DashboardController < ActionController::Base
       return
     end
 
+    # Build the redirect URL with required parameters for DeviseTokenAuth
+    # - resource_class=User tells devise_token_auth which model to authenticate against
+    # - auth_origin_url is the URL to redirect back to after successful authentication
+    redirect_url = '/auth/keycloak_openid?resource_class=User'
+    redirect_url += "&auth_origin_url=#{CGI.escape(request.base_url + '/app')}"
+    
+    # Log the full redirect URL for debugging
+    Rails.logger.info "Redirecting to: #{redirect_url}"
+    
     # Use an immediate, forced redirect with a status code
-    # Include resource_class=User to tell devise_token_auth which model to authenticate against
-    redirect_to '/auth/keycloak_openid?resource_class=User', status: :found, allow_other_host: true and return
+    redirect_to redirect_url, status: :found, allow_other_host: true and return
   end
 
   def ensure_html_format
