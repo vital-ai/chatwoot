@@ -17,7 +17,7 @@
 #  last_sign_in_ip        :string
 #  message_signature      :text
 #  name                   :string           not null
-#  provider               :string           default("email"), not null
+#  provider               :string           default("keycloak"), not null
 #  pubsub_token           :string
 #  remember_created_at    :datetime
 #  reset_password_sent_at :datetime

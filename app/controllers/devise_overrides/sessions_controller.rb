@@ -10,7 +10,24 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
     Rails.logger.info "OmniAuth env: #{request.env['omniauth.auth'].inspect if request.env['omniauth.auth']}"
     Rails.logger.info "OmniAuth error: #{request.env['omniauth.error'].inspect if request.env['omniauth.error']}"
     
-    redirect_to login_page_url(error: 'access-denied'), allow_other_host: true
+    # If we're in the OmniAuth callback with an error, proceed with error redirect
+    if request.env['omniauth.error']
+      Rails.logger.error("OmniAuth error detected: #{request.env['omniauth.error'].message}")
+      redirect_to login_page_url(error: 'access-denied'), allow_other_host: true
+      return
+    end
+    
+    # If this is a regular sign-in page request and SSO is enabled, redirect to Keycloak
+    # This enforces SSO by preventing access to the email/password login form
+    if ENV.fetch('KEYCLOAK_CLIENT_ID', nil).present?
+      Rails.logger.info "Redirecting to Keycloak for SSO authentication"
+      redirect_to '/auth/keycloak_openid?resource_class=User', allow_other_host: true
+      return
+    end
+    
+    # For non-SSO or if we somehow get here with SSO enabled
+    Rails.logger.info "Proceeding with normal Devise sign-in flow"
+    super
   end
 
   def create

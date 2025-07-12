@@ -37,16 +37,28 @@ class DashboardController < ActionController::Base
   end
 
   def redirect_to_keycloak
+    # Add detailed debugging
+    Rails.logger.info "========== KEYCLOAK REDIRECT DEBUG =========="
+    Rails.logger.info "Current user: #{current_user.inspect}" if defined?(current_user)
+    Rails.logger.info "Request path: #{request.path}"
+    Rails.logger.info "Current controller: #{self.class.name}, action: #{action_name}"
+    Rails.logger.info "Request format: #{request.format}"
+    Rails.logger.info "Session ID: #{request.session.id}" if defined?(request.session)
+    Rails.logger.info "============================================"
+    
     # Do not redirect if the user is already in the omniauth flow
     # or if the user is already in the auth flow
-    return if request.path.include?('/auth/') || 
-             request.path.include?('/users/auth/') || 
-             request.path.include?('/users/confirmation') ||
-             request.path.include?('/api/')
+    if request.path.include?('/auth/') || 
+       request.path.include?('/users/auth/') || 
+       request.path.include?('/users/confirmation') ||
+       request.path.include?('/api/')
+      Rails.logger.info "SKIPPING REDIRECT: Path includes auth or API path"
+      return
+    end
     
     # Skip redirect if auth failure was detected
     if @skip_keycloak_redirect
-      Rails.logger.info "Skipping Keycloak redirect due to auth failure flag"
+      Rails.logger.info "SKIPPING REDIRECT: Auth failure flag detected"
       
       # Clear the auth_failed flag after using it
       session[:auth_failed] = nil if defined?(session)
@@ -63,26 +75,17 @@ class DashboardController < ActionController::Base
       return render :index
     end
     
-    Rails.logger.info "Redirecting unauthenticated user to Keycloak: #{request.path}"
+    Rails.logger.info "PERFORMING REDIRECT: Redirecting to Keycloak"
 
-    # Create a form that posts to the OmniAuth path instead of redirecting
-    # This is necessary because OmniAuth might be expecting a POST request
-    render html: <<~HTML.html_safe
-      <html>
-        <body>
-          <form id="keycloak_form" method="post" action="/auth/keycloak_openid">
-            <input type="hidden" name="resource_class" value="User">
-            <input type="hidden" name="authenticity_token" value="#{form_authenticity_token}">
-            <noscript>
-              <button type="submit">Continue to Keycloak</button>
-            </noscript>
-          </form>
-          <script>
-            document.getElementById('keycloak_form').submit();
-          </script>
-        </body>
-      </html>
-    HTML
+    # Check if user is already authenticated
+    if user_signed_in?
+      Rails.logger.info "User already signed in, skipping Keycloak redirect"
+      return
+    end
+
+    # Use an immediate, forced redirect with a status code
+    # Include resource_class=User to tell devise_token_auth which model to authenticate against
+    redirect_to '/auth/keycloak_openid?resource_class=User', status: :found, allow_other_host: true and return
   end
 
   def ensure_html_format
