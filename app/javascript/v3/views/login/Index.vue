@@ -14,6 +14,7 @@ import globalConfigMixin from 'shared/mixins/globalConfigMixin';
 // components
 import FormInput from '../../components/Form/Input.vue';
 import GoogleOAuthButton from '../../components/GoogleOauth/Button.vue';
+import KeycloakOAuthButton from '../../components/KeycloakOauth/Button.vue';
 import Spinner from 'shared/components/Spinner.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 
@@ -28,6 +29,7 @@ export default {
   components: {
     FormInput,
     GoogleOAuthButton,
+    KeycloakOAuthButton,
     Spinner,
     NextButton,
   },
@@ -75,6 +77,9 @@ export default {
     ...mapGetters({ globalConfig: 'globalConfig/get' }),
     showGoogleOAuth() {
       return Boolean(window.chatwootConfig.googleOAuthClientId);
+    },
+    showKeycloakOAuth() {
+      return Boolean(window.chatwootConfig.keycloakClientId);
     },
     showSignupLink() {
       return parseBoolean(window.chatwootConfig.signupEnabled);
@@ -201,7 +206,16 @@ export default {
       }"
     >
       <div v-if="!email">
-        <GoogleOAuthButton v-if="showGoogleOAuth" />
+        <GoogleOAuthButton 
+          v-if="showGoogleOAuth && !showKeycloakOAuth" 
+        />
+        <KeycloakOAuthButton 
+          v-if="showKeycloakOAuth && !showGoogleOAuth" 
+        />
+        <div v-if="showGoogleOAuth && showKeycloakOAuth" class="space-y-3">
+          <GoogleOAuthButton :show-separator="false" />
+          <KeycloakOAuthButton />
+        </div>
         <form class="space-y-5" @submit.prevent="submitFormLogin">
           <FormInput
             v-model="credentials.email"

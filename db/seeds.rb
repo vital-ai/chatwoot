@@ -41,6 +41,21 @@ unless Rails.env.production?
     role: :administrator
   )
 
+  marc_user = User.new(name: 'Marc', email: 'marc@hadfield.org', password: 'Password1!')
+  marc_user.skip_confirmation!
+  marc_user.save!
+
+  AccountUser.create!(
+    account_id: account.id,
+    user_id: marc_user.id,
+    role: :administrator
+  )
+
+
+  marc_admin = User.new(name: 'Marc Hadfield', email: 'marc@cardiff.co', password: 'Password1!', type: 'SuperAdmin')
+  marc_admin.skip_confirmation!
+  marc_admin.save!
+
   web_widget = Channel::WebWidget.create!(account: account, website_url: 'https://acme.inc')
 
   inbox = Inbox.create!(channel: web_widget, account: account, name: 'Acme Support')
