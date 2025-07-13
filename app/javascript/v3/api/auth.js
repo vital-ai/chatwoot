@@ -12,15 +12,36 @@ export const login = async ({
   ...credentials
 }) => {
   try {
+    console.log('[AUTH] Login attempt with:', { 
+      ssoAuthToken: credentials.sso_auth_token ? 'present' : 'not present',
+      ssoAccountId: ssoAccountId || 'not present',
+      ssoConversationId: ssoConversationId || 'not present',
+      email: credentials.email ? 'present' : 'not present',
+    });
+    
+    // Normal login flow with API call
+    console.log('[AUTH] Proceeding with login API call');
     const response = await wootAPI.post('auth/sign_in', credentials);
+    
+    console.log('[AUTH] Login API response received:', {
+      status: response.status,
+      headers: response.headers ? 'present' : 'not present',
+      data: response.data ? 'present' : 'not present'
+    });
+    
     setAuthCredentials(response);
     clearLocalStorageOnLogout();
-    window.location = getLoginRedirectURL({
+    
+    const redirectUrl = getLoginRedirectURL({
       ssoAccountId,
       ssoConversationId,
       user: response.data.data,
     });
+    
+    console.log('[AUTH] Redirecting to dashboard after successful login:', redirectUrl);
+    window.location = redirectUrl;
   } catch (error) {
+    console.error('[AUTH] Login error:', error);
     throwErrorMessage(error);
   }
 };

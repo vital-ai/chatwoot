@@ -7,6 +7,10 @@ Rails.application.routes.draw do
     token_validations: 'devise_overrides/token_validations',
     omniauth_callbacks: 'devise_overrides/omniauth_callbacks'
   }, via: [:get, :post]
+  
+  # Explicitly map Keycloak callback to our custom controller to handle the conflict with super_admin routes
+  get '/auth/keycloak_openid/callback', to: 'devise_overrides/omniauth_callbacks#keycloak_openid'
+  post '/auth/keycloak_openid/callback', to: 'devise_overrides/omniauth_callbacks#keycloak_openid'
 
   ## renders the frontend paths only if its not an api only server
   if ActiveModel::Type::Boolean.new.cast(ENV.fetch('CW_API_ONLY_SERVER', false))

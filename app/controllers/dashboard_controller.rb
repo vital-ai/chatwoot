@@ -49,6 +49,13 @@ class DashboardController < ActionController::Base
     Rails.logger.info "Request env omniauth.origin: #{request.env['omniauth.origin']}" if request.env['omniauth.origin']
     Rails.logger.info "============================================"
     
+    # IMPORTANT: Check if auth tokens are present in the URL params
+    # DeviseTokenAuth adds these parameters after successful authentication
+    if params[:auth_token].present? && params[:uid].present? && (params[:client].present? || params[:client_id].present?)
+      Rails.logger.info "SKIPPING REDIRECT: Auth tokens detected in URL"
+      return
+    end
+    
     # Do not redirect if we're in a callback or auth flow
     if request.path.include?('/auth/') || 
        request.path.include?('/users/auth/') || 
@@ -84,19 +91,33 @@ class DashboardController < ActionController::Base
       return render :index
     end
     
-    Rails.logger.info "PERFORMING REDIRECT: Redirecting to Keycloak"
-
-    # Check if user is already authenticated
-    if user_signed_in?
-      Rails.logger.info "User already signed in, skipping Keycloak redirect"
+    # Check for HTTP auth headers (used by API and mobile clients)
+    auth_headers = request.headers.to_h.select { |k, _| k.to_s.start_with?('HTTP_ACCESS_TOKEN', 'HTTP_UID', 'HTTP_CLIENT') }
+    if auth_headers.present? && auth_headers.size >= 3
+      Rails.logger.info "SKIPPING REDIRECT: Auth headers detected"
       return
     end
+    
+    # Check if user is already authenticated via cookies
+    if user_signed_in?
+      Rails.logger.info "User already signed in via session, skipping Keycloak redirect"
+      return
+    end
+    
+    # Check for authentication cookies
+    auth_cookies = cookies.to_h.select { |k, _| k.to_s.include?('token') || k.to_s.include?('client') }
+    if auth_cookies.present? && auth_cookies.size >= 2
+      Rails.logger.info "SKIPPING REDIRECT: Auth cookies detected"
+      return
+    end
+    
+    Rails.logger.info "PERFORMING REDIRECT: No authentication detected, redirecting to Keycloak"
 
     # Build the redirect URL with required parameters for DeviseTokenAuth
     # - resource_class=User tells devise_token_auth which model to authenticate against
     # - auth_origin_url is the URL to redirect back to after successful authentication
     redirect_url = '/auth/keycloak_openid?resource_class=User'
-    redirect_url += "&auth_origin_url=#{CGI.escape(request.base_url + '/app')}"
+    redirect_url += "&auth_origin_url=#{CGI.escape(request.base_url + '/app/login')}"
     
     # Log the full redirect URL for debugging
     Rails.logger.info "Redirecting to: #{redirect_url}"
