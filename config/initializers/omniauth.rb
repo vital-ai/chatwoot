@@ -7,7 +7,7 @@ Rails.application.config.middleware.use OmniAuth::Builder do
   
   # Configuration for Keycloak 17+ (Quarkus) based on user's suggestion
   realm = ENV.fetch('KEYCLOAK_REALM', 'master')
-  site_url = 'http://host.docker.internal:8085'
+  site_url = ENV.fetch('KEYCLOAK_SERVER_URL', 'http://host.docker.internal:8085')
   callback_url = ENV.fetch('KEYCLOAK_CALLBACK_URL', ENV.fetch('FRONTEND_URL', 'http://localhost:3000') + '/auth/keycloak/callback')
   
   # For logging/debugging

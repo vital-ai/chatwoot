@@ -54,9 +54,9 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     return redirect_to login_page_url(error: 'business-account-only'), allow_other_host: true unless validate_signup_email_is_business_domain?
 
     create_account_for_user
-    token = @resource.send(:set_reset_password_token)
-    frontend_url = ENV.fetch('FRONTEND_URL', nil)
-    redirect_to "#{frontend_url}/app/auth/password/edit?config=default&reset_password_token=#{token}", allow_other_host: true
+    # For OAuth users, redirect directly to login with SSO token (same as existing users)
+    encoded_email = ERB::Util.url_encode(@resource.email)
+    redirect_to login_page_url(email: encoded_email, sso_auth_token: @resource.generate_sso_auth_token), allow_other_host: true
   end
 
   def login_page_url(error: nil, email: nil, sso_auth_token: nil)
@@ -112,14 +112,16 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
     if auth_hash && auth_hash['info'] && auth_hash['info']['email'].present?
       email = auth_hash['info']['email']
       name = auth_hash['info']['name'] || email.split('@').first
-      email_verified = auth_hash['info']['email_verified'] || false
+      # Get email_verified from raw_info (JWT payload) instead of info hash
+    email_verified = auth_hash.dig('extra', 'raw_info', 'email_verified') || false
       
       @resource, @account = AccountBuilder.new(
-        account_name: extract_domain_without_tld(email),
+        account_name: email.split('@').last,
         user_full_name: name,
         email: email,
         locale: I18n.locale,
-        confirmed: email_verified
+        confirmed: email_verified,
+        user_password: SecureRandom.alphanumeric(12) + "A1!"
       ).perform
       
       if auth_hash['info']['image'].present?

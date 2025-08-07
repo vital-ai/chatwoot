@@ -10,7 +10,7 @@ class AccountBuilder
       validate_user
     end
     ActiveRecord::Base.transaction do
-      @account = create_account
+      @account = find_or_create_account
       @user = create_and_link_user
     end
     [@user, @account]
@@ -43,8 +43,8 @@ class AccountBuilder
     end
   end
 
-  def create_account
-    @account = Account.create!(name: account_name, locale: I18n.locale)
+  def find_or_create_account
+    @account = Account.find_by(name: account_name) || Account.create!(name: account_name, locale: I18n.locale)
     Current.account = @account
   end
 
@@ -67,8 +67,8 @@ class AccountBuilder
 
   def create_user
     @user = User.new(email: @email,
-                     password: user_password,
-                     password_confirmation: user_password,
+                     password: @user_password,
+                     password_confirmation: @user_password,
                      name: user_full_name)
     @user.type = 'SuperAdmin' if @super_admin
     @user.confirm if @confirmed
