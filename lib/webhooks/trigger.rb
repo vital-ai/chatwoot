@@ -21,11 +21,17 @@ class Webhooks::Trigger
   private
 
   def perform_request
+    timestamp = Time.current.to_i
+    signature = generate_signature(timestamp) if bot_webhook_with_signatures?
+    
+    headers = { content_type: :json, accept: :json }
+    headers.merge!(signature_headers(signature, timestamp)) if signature
+    
     RestClient::Request.execute(
       method: :post,
       url: @url,
       payload: @payload.to_json,
-      headers: { content_type: :json, accept: :json },
+      headers: headers,
       timeout: 5
     )
   end
@@ -53,5 +59,40 @@ class Webhooks::Trigger
 
   def message_id
     @payload[:id]
+  end
+
+  def bot_webhook_with_signatures?
+    bot_webhook? && Webhooks::SignatureService.enabled?
+  end
+
+  def bot_webhook?
+    @webhook_type == :agent_bot_webhook
+  end
+
+  def generate_signature(timestamp)
+    return nil unless bot_webhook_with_signatures?
+    
+    begin
+      Webhooks::SignatureService.generate(@payload.to_json, timestamp)
+    rescue StandardError => e
+      Rails.logger.error "Failed to generate webhook signature: #{e.message}"
+      nil
+    end
+  end
+
+  def signature_headers(signature, timestamp)
+    return {} unless signature
+    
+    headers = {
+      'X-Chatwoot-Signature' => signature,
+      'X-Chatwoot-Timestamp' => timestamp.to_s
+    }
+    
+    # Add bot ID if available in payload
+    if @payload[:bot]&.dig(:id)
+      headers['X-Chatwoot-Bot-Id'] = @payload[:bot][:id].to_s
+    end
+    
+    headers
   end
 end
