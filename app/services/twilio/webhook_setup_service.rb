@@ -1,5 +1,6 @@
 class Twilio::WebhookSetupService
   include Rails.application.routes.url_helpers
+  include WebhookUrlHelper
 
   pattr_initialize [:inbox!]
 
@@ -18,7 +19,7 @@ class Twilio::WebhookSetupService
       .messaging.services(channel.messaging_service_sid)
       .update(
         inbound_method: 'POST',
-        inbound_request_url: twilio_callback_index_url,
+        inbound_request_url: webhook_url('/twilio/callback'),
         use_inbound_webhook_on_number: false
       )
   end
@@ -29,7 +30,7 @@ class Twilio::WebhookSetupService
     else
       twilio_client
         .incoming_phone_numbers(phonenumber_sid)
-        .update(sms_method: 'POST', sms_url: twilio_callback_index_url)
+        .update(sms_method: 'POST', sms_url: webhook_url('/twilio/callback'))
     end
   end
 

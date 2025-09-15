@@ -1,4 +1,5 @@
 class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseService
+  include WebhookUrlHelper
   def send_message(phone_number, message)
     @message = message
     if message.attachments.present?
@@ -36,7 +37,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       "#{api_base_path}/configs/webhook",
       headers: { 'D360-API-KEY': whatsapp_channel.provider_config['api_key'], 'Content-Type': 'application/json' },
       body: {
-        url: "#{ENV.fetch('FRONTEND_URL', nil)}/webhooks/whatsapp/#{whatsapp_channel.phone_number}"
+        url: webhook_url("/webhooks/whatsapp/#{whatsapp_channel.phone_number}")
       }.to_json
     )
     response.success?
