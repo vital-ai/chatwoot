@@ -13,14 +13,19 @@ import {
   ALLOWED_FILE_TYPES_FOR_INSTAGRAM,
 } from 'shared/constants/messages';
 import VideoCallButton from '../VideoCallButton.vue';
-import AIAssistanceButton from '../AIAssistanceButton.vue';
+
+// hide the AI Assist button
+// import AIAssistanceButton from '../AIAssistanceButton.vue';
+
 import { REPLY_EDITOR_MODES } from './constants';
 import { mapGetters } from 'vuex';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 
 export default {
   name: 'ReplyBottomPanel',
-  components: { NextButton, FileUpload, VideoCallButton, AIAssistanceButton },
+  // components: { NextButton, FileUpload, VideoCallButton, AIAssistanceButton },
+  components: { NextButton, FileUpload, VideoCallButton},
+
   mixins: [inboxMixin],
   props: {
     mode: {
@@ -345,6 +350,8 @@ export default {
         v-if="(isAWebWidgetInbox || isAPIInbox) && !isOnPrivateNote"
         :conversation-id="conversationId"
       />
+      
+      <!--
       <AIAssistanceButton
         v-if="!isFetchingAppIntegrations"
         :conversation-id="conversationId"
@@ -352,6 +359,8 @@ export default {
         :message="message"
         @replace-text="replaceText"
       />
+    -->
+      
       <transition name="modal-fade">
         <div
           v-show="uploadRef && uploadRef.dropActive"
