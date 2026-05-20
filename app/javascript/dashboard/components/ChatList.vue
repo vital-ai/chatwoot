@@ -401,10 +401,7 @@ function fetchFilteredConversations(payload) {
       queryData: filterQueryGenerator(payload),
       page,
     })
-    .then(emitConversationLoaded)
-    .finally(() => {
-      isFetching.value = false;
-    });
+    .then(emitConversationLoaded);
 
   showAdvancedFilters.value = false;
 }
@@ -419,13 +416,21 @@ function fetchSavedFilteredConversations(payload) {
       queryData: payload,
       page,
     })
-    .then(emitConversationLoaded)
-    .finally(() => {
-      isFetching.value = false;
-    });
+    .then(emitConversationLoaded);
+}
+
+function hasEmptyFilterValues(filters) {
+  return filters.some(filter => {
+    const vals = filter.values;
+    if (!vals) return true;
+    if (Array.isArray(vals)) return vals.length === 0;
+    if (typeof vals === 'object') return Object.keys(vals).length === 0;
+    return false;
+  });
 }
 
 function onApplyFilter(payload) {
+  if (hasEmptyFilterValues(payload)) return;
   isFetching.value = false;
   payload = useSnakeCase(payload);
   resetBulkActions();
@@ -582,10 +587,7 @@ function fetchConversations() {
   isFetching.value = true;
   store.dispatch('updateChatListFilters', conversationFilters.value);
   store.dispatch('fetchAllConversations')
-    .then(emitConversationLoaded)
-    .finally(() => {
-      isFetching.value = false;
-    });
+    .then(emitConversationLoaded);
 }
 
 function resetAndFetchData() {
@@ -609,6 +611,7 @@ function loadMoreConversations() {
   if (hasCurrentPageEndReached.value || chatListLoading.value || isFetching.value) {
     return;
   }
+  isFetching.value = true;
 
   if (!hasAppliedFiltersOrActiveFolders.value) {
     fetchConversations();
@@ -625,7 +628,8 @@ function handleScroll() {
   const scroller = conversationDynamicScroller.value;
   if (scroller && scroller.hasScrollbar) {
     const { scrollTop, scrollHeight, clientHeight } = scroller.$el;
-    if (scrollHeight - (scrollTop + clientHeight) < 100) {
+    if (scrollTop > 0 && scrollHeight - (scrollTop + clientHeight) < 100) {
+      isFetching.value = false;
       loadMoreConversations();
     }
   }
