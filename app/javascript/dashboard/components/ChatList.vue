@@ -564,9 +564,17 @@ function onToggleAdvanceFiltersModal() {
   showAdvancedFilters.value = true;
 }
 
+const isFetching = ref(false);
+
 function fetchConversations() {
+  if (isFetching.value) return;
+  isFetching.value = true;
   store.dispatch('updateChatListFilters', conversationFilters.value);
-  store.dispatch('fetchAllConversations').then(emitConversationLoaded);
+  store.dispatch('fetchAllConversations')
+    .then(emitConversationLoaded)
+    .finally(() => {
+      isFetching.value = false;
+    });
 }
 
 function resetAndFetchData() {
@@ -834,7 +842,7 @@ watch(chatLists, () => {
 });
 
 watch(conversationFilters, (newVal, oldVal) => {
-  if (newVal !== oldVal) {
+  if (JSON.stringify(newVal) !== JSON.stringify(oldVal)) {
     store.dispatch('updateChatListFilters', newVal);
   }
 });
