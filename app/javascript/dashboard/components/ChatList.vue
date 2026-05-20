@@ -392,6 +392,8 @@ function emitConversationLoaded() {
 }
 
 function fetchFilteredConversations(payload) {
+  if (isFetching.value) return;
+  isFetching.value = true;
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
   store
@@ -399,12 +401,17 @@ function fetchFilteredConversations(payload) {
       queryData: filterQueryGenerator(payload),
       page,
     })
-    .then(emitConversationLoaded);
+    .then(emitConversationLoaded)
+    .finally(() => {
+      isFetching.value = false;
+    });
 
   showAdvancedFilters.value = false;
 }
 
 function fetchSavedFilteredConversations(payload) {
+  if (isFetching.value) return;
+  isFetching.value = true;
   payload = useSnakeCase(payload);
   let page = currentFiltersPage.value + 1;
   store
@@ -412,10 +419,14 @@ function fetchSavedFilteredConversations(payload) {
       queryData: payload,
       page,
     })
-    .then(emitConversationLoaded);
+    .then(emitConversationLoaded)
+    .finally(() => {
+      isFetching.value = false;
+    });
 }
 
 function onApplyFilter(payload) {
+  isFetching.value = false;
   payload = useSnakeCase(payload);
   resetBulkActions();
   foldersQuery.value = filterQueryGenerator(payload);
@@ -578,6 +589,7 @@ function fetchConversations() {
 }
 
 function resetAndFetchData() {
+  isFetching.value = false;
   appliedFilter.value = [];
   resetBulkActions();
   store.dispatch('conversationPage/reset');
@@ -594,7 +606,7 @@ function resetAndFetchData() {
 }
 
 function loadMoreConversations() {
-  if (hasCurrentPageEndReached.value || chatListLoading.value) {
+  if (hasCurrentPageEndReached.value || chatListLoading.value || isFetching.value) {
     return;
   }
 
