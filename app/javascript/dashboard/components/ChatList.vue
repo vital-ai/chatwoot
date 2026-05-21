@@ -634,15 +634,13 @@ function onObservedSentinel() {
   loadMoreConversations();
 }
 
-// Add a method to handle scroll events
 function handleScroll() {
   const scroller = conversationDynamicScroller.value;
-  if (scroller && scroller.hasScrollbar) {
-    const { scrollTop, scrollHeight, clientHeight } = scroller.$el;
-    if (scrollTop > 0 && scrollHeight - (scrollTop + clientHeight) < 100) {
-      observerCanFire = true;
-      loadMoreConversations();
-    }
+  if (!scroller || !scroller.$el) return;
+  const { scrollTop, scrollHeight, clientHeight } = scroller.$el;
+  if (scrollHeight > clientHeight && scrollTop > 0 && scrollHeight - (scrollTop + clientHeight) < 100) {
+    observerCanFire = true;
+    loadMoreConversations();
   }
 }
 
