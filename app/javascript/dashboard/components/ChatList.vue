@@ -401,7 +401,8 @@ function fetchFilteredConversations(payload) {
       queryData: filterQueryGenerator(payload),
       page,
     })
-    .then(emitConversationLoaded);
+    .then(emitConversationLoaded)
+    .finally(() => { isFetching.value = false; });
 
   showAdvancedFilters.value = false;
 }
@@ -416,7 +417,8 @@ function fetchSavedFilteredConversations(payload) {
       queryData: payload,
       page,
     })
-    .then(emitConversationLoaded);
+    .then(emitConversationLoaded)
+    .finally(() => { isFetching.value = false; });
 }
 
 function hasEmptyFilterValues(filters) {
@@ -432,6 +434,7 @@ function hasEmptyFilterValues(filters) {
 function onApplyFilter(payload) {
   if (hasEmptyFilterValues(payload)) return;
   isFetching.value = false;
+  observerCanFire = true;
   payload = useSnakeCase(payload);
   resetBulkActions();
   foldersQuery.value = filterQueryGenerator(payload);
@@ -581,17 +584,20 @@ function onToggleAdvanceFiltersModal() {
 }
 
 const isFetching = ref(false);
+let observerCanFire = true;
 
 function fetchConversations() {
   if (isFetching.value) return;
   isFetching.value = true;
   store.dispatch('updateChatListFilters', conversationFilters.value);
   store.dispatch('fetchAllConversations')
-    .then(emitConversationLoaded);
+    .then(emitConversationLoaded)
+    .finally(() => { isFetching.value = false; });
 }
 
 function resetAndFetchData() {
   isFetching.value = false;
+  observerCanFire = true;
   appliedFilter.value = [];
   resetBulkActions();
   store.dispatch('conversationPage/reset');
@@ -622,13 +628,19 @@ function loadMoreConversations() {
   }
 }
 
+function onObservedSentinel() {
+  if (!observerCanFire) return;
+  observerCanFire = false;
+  loadMoreConversations();
+}
+
 // Add a method to handle scroll events
 function handleScroll() {
   const scroller = conversationDynamicScroller.value;
   if (scroller && scroller.hasScrollbar) {
     const { scrollTop, scrollHeight, clientHeight } = scroller.$el;
     if (scrollTop > 0 && scrollHeight - (scrollTop + clientHeight) < 100) {
-      isFetching.value = false;
+      observerCanFire = true;
       loadMoreConversations();
     }
   }
@@ -989,7 +1001,7 @@ watch(conversationFilters, (newVal, oldVal) => {
           <IntersectionObserver
             v-else
             :options="intersectionObserverOptions"
-            @observed="loadMoreConversations"
+            @observed="onObservedSentinel"
           />
         </template>
       </DynamicScroller>
