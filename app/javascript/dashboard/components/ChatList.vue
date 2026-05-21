@@ -611,7 +611,6 @@ function loadMoreConversations() {
   if (hasCurrentPageEndReached.value || chatListLoading.value || isFetching.value) {
     return;
   }
-  isFetching.value = true;
 
   if (!hasAppliedFiltersOrActiveFolders.value) {
     fetchConversations();
