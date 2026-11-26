@@ -1,4 +1,5 @@
 <script>
+import { chatwootLink } from 'shared/helpers/installationName';
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { useWhatsappEmbeddedSignup } from 'dashboard/composables/useWhatsappEmbeddedSignup';
@@ -60,6 +61,12 @@ export default {
     whatsAppAppSecret: { required },
   },
   computed: {
+    // Vital's fork: '' on a custom-branded installation, and the layout hides empty links
+    identityValidationDocsUrl() {
+      return chatwootLink(
+        'https://www.chatwoot.com/docs/product/channels/live-chat/sdk/identity-validation/'
+      );
+    },
     ...mapGetters({
       isOnChatwootCloud: 'globalConfig/isOnChatwootCloud',
     }),
@@ -334,7 +341,7 @@ export default {
             <a
               target="_blank"
               rel="noopener noreferrer"
-              href="https://www.chatwoot.com/docs/product/channels/live-chat/sdk/identity-validation/"
+              :href="identityValidationDocsUrl"
               class="text-n-blue-11 hover:underline text-label-small"
             >
               {{

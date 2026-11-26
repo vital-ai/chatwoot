@@ -1,4 +1,5 @@
 <script setup>
+import { chatwootLink } from 'shared/helpers/installationName';
 import { ref, computed, watch, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
@@ -320,9 +321,14 @@ const navigateToAssignmentPolicyEdit = () => {
 };
 
 const handleUpgrade = () => {
+  // Vital's fork: no link to Chatwoot's pricing on a custom-branded installation
+  const pricingUrl = chatwootLink(
+    'https://www.chatwoot.com/pricing/self-hosted-plans'
+  );
   if (!isOnChatwootCloud.value) {
+    if (!pricingUrl) return;
     window.open(
-      'https://www.chatwoot.com/pricing/self-hosted-plans',
+      pricingUrl,
       '_blank',
       'noopener,noreferrer'
     );

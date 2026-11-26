@@ -82,6 +82,8 @@
     <% end %>
     <%= vite_client_tag %>
     <%= vite_javascript_tag @application_pack %>
+    <%# Vital's fork: links to Chatwoot's site are emptied on a custom-branded installation (chatwootLink); hide them %>
+    <style>a[href=""] { display: none !important; }</style>
   </head>
   <body class="text-slate-600">
     <div id="app"></div>
