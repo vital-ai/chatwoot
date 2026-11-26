@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { postTranslation } from 'shared/helpers/installationName';
 
 import i18nMessages from 'dashboard/i18n';
 import * as Sentry from '@sentry/vue';
@@ -18,6 +19,7 @@ import FluentIcon from 'shared/components/FluentIcon/DashboardIcon.vue';
 // Vue.config.env = process.env;
 
 const i18n = createI18n({
+  postTranslation, // Vital's fork: the installation's name, not Chatwoot's
   legacy: false, // https://github.com/intlify/vue-i18n/issues/1902
   locale: 'en',
   fallbackLocale: 'en',

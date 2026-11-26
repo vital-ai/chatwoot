@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { postTranslation } from 'shared/helpers/installationName';
 
 import axios from 'axios';
 // Global Components
@@ -35,6 +36,7 @@ import 'floating-vue/dist/style.css';
 import '@chatwoot/viz/style.css';
 
 const i18n = createI18n({
+  postTranslation, // Vital's fork: the installation's name, not Chatwoot's
   legacy: false, // https://github.com/intlify/vue-i18n/issues/1902
   locale: 'en',
   fallbackLocale: 'en',
