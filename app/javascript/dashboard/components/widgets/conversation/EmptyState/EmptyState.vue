@@ -4,11 +4,13 @@ import { useAdmin } from 'dashboard/composables/useAdmin';
 import { useAccount } from 'dashboard/composables/useAccount';
 import OnboardingView from '../OnboardingView.vue';
 import EmptyStateMessage from './EmptyStateMessage.vue';
+import CopilotEmptyStatePrompts from 'dashboard/components-next/copilot/CopilotEmptyStatePrompts.vue';
 
 export default {
   components: {
     OnboardingView,
     EmptyStateMessage,
+    CopilotEmptyStatePrompts,
   },
   props: {
     isOnExpandedLayout: {
@@ -58,7 +60,7 @@ export default {
       ) {
         return 'h-full overflow-auto w-full';
       }
-      return 'flex-1 min-w-0 px-0 flex flex-col items-center justify-center h-full';
+      return 'flex-1 min-w-0 px-0 flex flex-col items-center justify-center h-full bg-n-surface-1';
     },
   },
 };
@@ -93,6 +95,7 @@ export default {
         v-else-if="allConversations.length && !currentChat.id"
         :message="conversationMissingMessage"
       />
+      <CopilotEmptyStatePrompts />
     </div>
   </div>
 </template>

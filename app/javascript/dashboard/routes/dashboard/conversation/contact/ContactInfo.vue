@@ -1,33 +1,40 @@
 <script>
 import { mapGetters } from 'vuex';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import { useAlert } from 'dashboard/composables';
-import { dynamicTime } from 'shared/helpers/timeHelper';
+import {
+  DuplicateContactException,
+  ExceptionWithMessage,
+} from 'shared/helpers/CustomErrors';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import ContactInfoRow from './ContactInfoRow.vue';
-import Thumbnail from 'dashboard/components/widgets/Thumbnail.vue';
-import SocialIcons from './SocialIcons.vue';
+import ViewAllConversations from './ViewAllConversations.vue';
+import Avatar from 'next/avatar/Avatar.vue';
+import SocialProfileLinks from 'dashboard/components-next/social-profiles/SocialProfileLinks.vue';
 import EditContact from './EditContact.vue';
 import ContactMergeModal from 'dashboard/modules/contact/ContactMergeModal.vue';
+import ContactDeleteModal from 'dashboard/modules/contact/ContactDeleteModal.vue';
 import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
-import { BUS_EVENTS } from 'shared/constants/busEvents';
 import NextButton from 'dashboard/components-next/button/Button.vue';
-
-import {
-  isAConversationRoute,
-  isAInboxViewRoute,
-  getConversationDashboardRoute,
-} from '../../../../helper/routeHelpers';
-import { emitter } from 'shared/helpers/mitt';
+import VoiceCallButton from 'dashboard/components-next/Contacts/VoiceCallButton.vue';
+import InlineInput from 'dashboard/components-next/inline-input/InlineInput.vue';
+import Flag from 'dashboard/components-next/flag/Flag.vue';
 
 export default {
   components: {
     NextButton,
     ContactInfoRow,
+    ViewAllConversations,
     EditContact,
-    Thumbnail,
+    Avatar,
     ComposeConversation,
-    SocialIcons,
+    SocialProfileLinks,
     ContactMergeModal,
+    ContactDeleteModal,
+    VoiceCallButton,
+    InlineInput,
+    Flag,
   },
   props: {
     contact: {
@@ -44,35 +51,53 @@ export default {
     const { isAdmin } = useAdmin();
     return {
       isAdmin,
+      exactTimestamp: useExactTimestamp(),
     };
   },
   data() {
     return {
       showEditModal: false,
-      showMergeModal: false,
-      showDeleteModal: false,
+      isEditingName: false,
+      editName: '',
     };
   },
   computed: {
-    ...mapGetters({ uiFlags: 'contacts/getUIFlags' }),
+    ...mapGetters({
+      uiFlags: 'contacts/getUIFlags',
+      currentChat: 'getSelectedChat',
+      isFeatureEnabledOnAccount: 'accounts/isFeatureEnabledonAccount',
+    }),
+    hasCompaniesFeature() {
+      return this.isFeatureEnabledOnAccount(
+        Number(this.$route.params.accountId),
+        FEATURE_FLAGS.COMPANIES
+      );
+    },
     contactProfileLink() {
       return `/app/accounts/${this.$route.params.accountId}/contacts/${this.contact.id}`;
+    },
+    companyLink() {
+      return this.hasCompaniesFeature && this.contact.company_id
+        ? `/app/accounts/${this.$route.params.accountId}/companies/${this.contact.company_id}`
+        : '';
     },
     additionalAttributes() {
       return this.contact.additional_attributes || {};
     },
     location() {
-      const {
-        country = '',
-        city = '',
-        country_code: countryCode,
-      } = this.additionalAttributes;
+      const { country = '', city = '' } = this.additionalAttributes;
       const cityAndCountry = [city, country].filter(item => !!item).join(', ');
 
       if (!cityAndCountry) {
         return '';
       }
-      return this.findCountryFlag(countryCode, cityAndCountry);
+      return this.countryCode ? cityAndCountry : `${cityAndCountry} 🌎`;
+    },
+    countryCode() {
+      const { country_code: countryCode } = this.additionalAttributes;
+      const isValid =
+        typeof countryCode === 'string' && /^[a-z]{2}$/i.test(countryCode);
+      return isValid ? countryCode : '';
     },
     socialProfiles() {
       const {
@@ -80,15 +105,26 @@ export default {
         screen_name: twitterScreenName,
         social_telegram_user_name: telegramUsername,
       } = this.additionalAttributes;
+
+      const telegram = socialProfiles?.telegram || telegramUsername || '';
+      const twitter = socialProfiles?.twitter || twitterScreenName || '';
+
       return {
-        twitter: twitterScreenName,
-        telegram: telegramUsername,
         ...(socialProfiles || {}),
+        twitter,
+        telegram,
       };
     },
-    // Delete Modal
-    confirmDeleteMessage() {
-      return ` ${this.contact.name}?`;
+    whatsappUsername() {
+      const username =
+        this.socialProfiles.whatsapp ||
+        this.additionalAttributes.social_whatsapp_user_name ||
+        '';
+
+      return username.toString().replace(/^@+/, '');
+    },
+    formattedWhatsappUsername() {
+      return this.whatsappUsername ? `@${this.whatsappUsername}` : '';
     },
   },
   watch: {
@@ -100,76 +136,60 @@ export default {
     },
   },
   methods: {
-    dynamicTime,
     toggleEditModal() {
       this.showEditModal = !this.showEditModal;
     },
-    openComposeConversationModal(toggleFn) {
-      toggleFn();
-      // Flag to prevent triggering drag n drop,
-      // When compose modal is active
-      emitter.emit(BUS_EVENTS.NEW_CONVERSATION_MODAL, true);
+    startEditingName() {
+      this.editName = this.contact.name || '';
+      this.isEditingName = true;
+      this.$nextTick(() => {
+        this.$refs.nameInput?.focus();
+      });
     },
-    closeComposeConversationModal() {
-      // Flag to enable drag n drop,
-      // When compose modal is closed
-      emitter.emit(BUS_EVENTS.NEW_CONVERSATION_MODAL, false);
-    },
-    toggleDeleteModal() {
-      this.showDeleteModal = !this.showDeleteModal;
-    },
-    confirmDeletion() {
-      this.deleteContact(this.contact);
-      this.closeDelete();
-    },
-    closeDelete() {
-      this.showDeleteModal = false;
-      this.showEditModal = false;
-    },
-    findCountryFlag(countryCode, cityAndCountry) {
-      try {
-        if (!countryCode) {
-          return `${cityAndCountry} 🌎`;
-        }
-
-        const code = countryCode?.toLowerCase();
-        return `${cityAndCountry} <span class="fi fi-${code} size-3.5"></span>`;
-      } catch (error) {
-        return '';
+    saveNameEdit() {
+      if (!this.isEditingName) return;
+      this.isEditingName = false;
+      const trimmed = this.editName.trim();
+      if (trimmed && trimmed !== this.contact.name) {
+        this.updateContactField({ name: trimmed });
       }
     },
-    async deleteContact({ id }) {
+    cancelNameEdit() {
+      this.isEditingName = false;
+    },
+    onFieldUpdate(field, value) {
+      this.updateContactField({ [field]: value });
+    },
+    async updateContactField(attrs) {
+      const contactId = this.contact.id;
       try {
-        await this.$store.dispatch('contacts/delete', id);
-        this.$emit('panelClose');
-        useAlert(this.$t('DELETE_CONTACT.API.SUCCESS_MESSAGE'));
-
-        if (isAConversationRoute(this.$route.name)) {
-          this.$router.push({
-            name: getConversationDashboardRoute(this.$route.name),
-          });
-        } else if (isAInboxViewRoute(this.$route.name)) {
-          this.$router.push({
-            name: 'inbox_view',
-          });
-        } else if (this.$route.name !== 'contacts_dashboard') {
-          this.$router.push({
-            name: 'contacts_dashboard',
-          });
-        }
+        await this.$store.dispatch('contacts/update', {
+          id: contactId,
+          ...attrs,
+        });
+        useAlert(this.$t('CONTACT_FORM.SUCCESS_MESSAGE'));
+        await this.$store.dispatch('contacts/fetchContactableInbox', contactId);
       } catch (error) {
-        useAlert(
-          error.message
-            ? error.message
-            : this.$t('DELETE_CONTACT.API.ERROR_MESSAGE')
-        );
+        if (error instanceof DuplicateContactException) {
+          const detail = error.contactErrorDetail;
+          if (detail) {
+            useAlert(detail);
+          } else {
+            const invalidAttrs = Array.isArray(error.data) ? error.data : [];
+            if (invalidAttrs.includes('email')) {
+              useAlert(this.$t('CONTACT_FORM.FORM.EMAIL_ADDRESS.DUPLICATE'));
+            } else if (invalidAttrs.includes('phone_number')) {
+              useAlert(this.$t('CONTACT_FORM.FORM.PHONE_NUMBER.DUPLICATE'));
+            } else {
+              useAlert(this.$t('CONTACT_FORM.ERROR_MESSAGE'));
+            }
+          }
+        } else if (error instanceof ExceptionWithMessage) {
+          useAlert(error.data);
+        } else {
+          useAlert(error.message || this.$t('CONTACT_FORM.ERROR_MESSAGE'));
+        }
       }
-    },
-    closeMergeModal() {
-      this.showMergeModal = false;
-    },
-    openMergeModal() {
-      this.showMergeModal = true;
     },
   },
 };
@@ -179,27 +199,57 @@ export default {
   <div class="relative items-center w-full p-4">
     <div class="flex flex-col w-full gap-2 text-left rtl:text-right">
       <div class="flex flex-row justify-between">
-        <Thumbnail
+        <Avatar
           v-if="showAvatar"
           :src="contact.thumbnail"
-          size="48px"
-          :username="contact.name"
+          :name="contact.name"
           :status="contact.availability_status"
+          :size="48"
+          hide-offline-status
         />
       </div>
 
       <div class="flex flex-col items-start gap-1.5 min-w-0 w-full">
-        <div v-if="showAvatar" class="flex items-center w-full min-w-0 gap-3">
-          <h3
-            class="flex-shrink max-w-full min-w-0 my-0 text-base capitalize break-words text-n-slate-12"
-          >
-            {{ contact.name }}
-          </h3>
+        <div v-if="showAvatar" class="flex items-center w-full min-w-0 gap-2">
+          <div class="group/name flex items-center min-w-0 gap-2">
+            <InlineInput
+              v-if="isEditingName"
+              ref="nameInput"
+              v-model="editName"
+              custom-input-class="!text-base !font-medium !w-auto max-w-full [field-sizing:content]"
+              class="!w-fit min-w-0"
+              @enter-press="saveNameEdit"
+              @escape-press="cancelNameEdit"
+              @blur="saveNameEdit"
+            />
+            <h3
+              v-else
+              class="flex-shrink max-w-full min-w-0 my-0 text-base capitalize break-words text-n-slate-12 cursor-pointer hover:text-n-slate-12/80"
+              :title="$t('CONTACT_PANEL.CLICK_TO_EDIT')"
+              @click="startEditingName"
+            >
+              {{ contact.name }}
+            </h3>
+            <NextButton
+              ghost
+              xs
+              slate
+              icon="i-lucide-pencil"
+              :title="$t('CONTACT_PANEL.CLICK_TO_EDIT')"
+              class="flex-shrink-0 -mx-1 opacity-0 transition-opacity"
+              :class="
+                isEditingName
+                  ? 'invisible'
+                  : 'group-hover/name:opacity-100 focus-visible:opacity-100'
+              "
+              @click="startEditingName"
+            />
+          </div>
           <div class="flex flex-row items-center gap-2">
             <span
               v-if="contact.created_at"
               v-tooltip.left="
-                `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${dynamicTime(
+                `${$t('CONTACT_PANEL.CREATED_AT_LABEL')} ${exactTimestamp(
                   contact.created_at
                 )}`
               "
@@ -227,6 +277,8 @@ export default {
             emoji="✉️"
             :title="$t('CONTACT_PANEL.EMAIL_ADDRESS')"
             show-copy
+            editable
+            @update="value => onFieldUpdate('email', value)"
           />
           <ContactInfoRow
             :href="contact.phone_number ? `tel:${contact.phone_number}` : ''"
@@ -234,6 +286,16 @@ export default {
             icon="call"
             emoji="📞"
             :title="$t('CONTACT_PANEL.PHONE_NUMBER')"
+            show-copy
+            editable
+            @update="value => onFieldUpdate('phone_number', value)"
+          />
+          <ContactInfoRow
+            v-if="formattedWhatsappUsername"
+            :value="formattedWhatsappUsername"
+            icon="brand-whatsapp"
+            emoji="💬"
+            :title="$t('CONTACT_PANEL.WHATSAPP_USERNAME')"
             show-copy
           />
           <ContactInfoRow
@@ -244,10 +306,21 @@ export default {
             :title="$t('CONTACT_PANEL.IDENTIFIER')"
           />
           <ContactInfoRow
+            :href="companyLink"
             :value="additionalAttributes.company_name"
             icon="building-bank"
             emoji="🏢"
             :title="$t('CONTACT_PANEL.COMPANY')"
+            :editable="!hasCompaniesFeature"
+            @update="
+              value =>
+                updateContactField({
+                  additional_attributes: {
+                    ...additionalAttributes,
+                    company_name: value,
+                  },
+                })
+            "
           />
           <ContactInfoRow
             v-if="location || additionalAttributes.location"
@@ -255,27 +328,39 @@ export default {
             icon="map"
             emoji="🌍"
             :title="$t('CONTACT_PANEL.LOCATION')"
-          />
-          <SocialIcons :social-profiles="socialProfiles" />
+          >
+            <Flag
+              v-if="location && countryCode"
+              :country="countryCode"
+              class="size-3.5"
+            />
+          </ContactInfoRow>
+          <SocialProfileLinks :profiles="socialProfiles" class="my-2" />
         </div>
       </div>
       <div class="flex items-center w-full mt-0.5 gap-2">
-        <ComposeConversation
-          :contact-id="String(contact.id)"
-          is-modal
-          @close="closeComposeConversationModal"
-        >
-          <template #trigger="{ toggle }">
+        <ComposeConversation :contact-id="String(contact.id)">
+          <template #trigger>
             <NextButton
               v-tooltip.top-end="$t('CONTACT_PANEL.NEW_MESSAGE')"
               icon="i-ph-chat-circle-dots"
               slate
               faded
               sm
-              @click="openComposeConversationModal(toggle)"
             />
           </template>
         </ComposeConversation>
+        <ViewAllConversations />
+        <VoiceCallButton
+          :phone="contact.phone_number"
+          :contact-id="contact.id"
+          :conversation-id="currentChat?.id"
+          icon="i-ph-phone"
+          sm
+          faded
+          slate
+          :tooltip-label="$t('CONTACT_PANEL.CALL')"
+        />
         <NextButton
           v-tooltip.top-end="$t('EDIT_CONTACT.BUTTON_LABEL')"
           icon="i-ph-pencil-simple"
@@ -284,50 +369,41 @@ export default {
           sm
           @click="toggleEditModal"
         />
-        <NextButton
-          v-tooltip.top-end="$t('CONTACT_PANEL.MERGE_CONTACT')"
-          icon="i-ph-arrows-merge"
-          slate
-          faded
-          sm
-          :disabled="uiFlags.isMerging"
-          @click="openMergeModal"
-        />
-        <NextButton
+        <ContactMergeModal :primary-contact="contact">
+          <template #trigger>
+            <NextButton
+              v-tooltip.top-end="$t('CONTACT_PANEL.MERGE_CONTACT')"
+              icon="i-ph-arrows-merge"
+              slate
+              faded
+              sm
+              :disabled="uiFlags.isMerging"
+            />
+          </template>
+        </ContactMergeModal>
+        <ContactDeleteModal
           v-if="isAdmin"
-          v-tooltip.top-end="$t('DELETE_CONTACT.BUTTON_LABEL')"
-          icon="i-ph-trash"
-          slate
-          faded
-          sm
-          ruby
-          :disabled="uiFlags.isDeleting"
-          @click="toggleDeleteModal"
-        />
+          :contact="contact"
+          @deleted="$emit('panelClose')"
+        >
+          <template #trigger>
+            <NextButton
+              v-tooltip.top-end="$t('DELETE_CONTACT.BUTTON_LABEL')"
+              icon="i-ph-trash"
+              slate
+              faded
+              sm
+              ruby
+              :disabled="uiFlags.isDeleting"
+            />
+          </template>
+        </ContactDeleteModal>
       </div>
       <EditContact
-        v-if="showEditModal"
         :show="showEditModal"
         :contact="contact"
         @cancel="toggleEditModal"
       />
-      <ContactMergeModal
-        v-if="showMergeModal"
-        :primary-contact="contact"
-        :show="showMergeModal"
-        @close="closeMergeModal"
-      />
     </div>
-    <woot-delete-modal
-      v-if="showDeleteModal"
-      v-model:show="showDeleteModal"
-      :on-close="closeDelete"
-      :on-confirm="confirmDeletion"
-      :title="$t('DELETE_CONTACT.CONFIRM.TITLE')"
-      :message="$t('DELETE_CONTACT.CONFIRM.MESSAGE')"
-      :message-value="confirmDeleteMessage"
-      :confirm-text="$t('DELETE_CONTACT.CONFIRM.YES')"
-      :reject-text="$t('DELETE_CONTACT.CONFIRM.NO')"
-    />
   </div>
 </template>

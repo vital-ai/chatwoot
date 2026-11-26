@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "ارسال نشد، دوباره امتحان کنید"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "خارج از دسترس"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "ما آنلاین هستیم",
-    "OFFLINE": "در حال حاضر دردسترس نیستیم"
+    "OFFLINE": "در حال حاضر دردسترس نیستیم",
+    "BACK_AS_SOON_AS_POSSIBLE": "در سریعترین زمان ممکن باز خواهیم گشت"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "معمولاً در عرض چند دقیقه پاسخ می دهند",
     "IN_A_FEW_HOURS": "معمولاً در عرض چند ساعت پاسخ می دهند",
     "IN_A_DAY": "به طور معمول در یک روز پاسخ می دهند",
-    "BACK_IN": "دوباره آنلاین خواهیم شد"
+    "BACK_IN_HOURS": "تا {n} ساعت دیگر باز خواهیم گشت | تا {n} ساعت دیگر باز خواهیم گشت",
+    "BACK_IN_MINUTES": "تا {time} دقیقه دیگر باز خواهیم گشت",
+    "BACK_AT_TIME": "در {time} باز خواهیم گشت",
+    "BACK_ON_DAY": "در روز {day} باز خواهیم گشت",
+    "BACK_TOMORROW": "فردا باز خواهیم گشت",
+    "BACK_IN_SOME_TIME": "مدتی دیگر باز خواهیم گشت"
   },
   "DAY_NAMES": {
     "SUNDAY": "یک‌شنبه",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "با ما گفتگو کنید"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "قدرت گرفته از چت ووت",
   "EMAIL_PLACEHOLDER": "لطفا ایمیل خود را وارد کنید",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "پیام خود را وارد کنید",
   "TODAY": "امروز",
   "YESTERDAY": "دیروز",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "جستجوی اموجی",
     "NOT_FOUND": "هیچ اموجی با جستجوی شما مطابقت ندارد",
     "ARIA_LABEL": "انتخاب اموجی"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "هیچ اموجی با جستجوی شما مطابقت ندارد"
   },
   "CSAT": {
     "TITLE": "به گفتگوی خود امتیاز دهید",

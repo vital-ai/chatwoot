@@ -9,6 +9,7 @@ import { useContactFilterContext } from './contactProvider.js';
 import { useSnakeCase } from 'dashboard/composables/useTransformKeys';
 
 import Button from 'next/button/Button.vue';
+import Input from 'dashboard/components-next/input/Input.vue';
 import ConditionRow from './ConditionRow.vue';
 
 const props = defineProps({
@@ -22,7 +23,7 @@ const emit = defineEmits([
   'close',
   'clearFilters',
 ]);
-const { filterTypes } = useContactFilterContext();
+const { attributeFilterTypes } = useContactFilterContext();
 
 const filters = defineModel({
   type: Array,
@@ -103,24 +104,21 @@ const outsideClickHandler = [
 <template>
   <div
     v-on-click-outside="outsideClickHandler"
-    class="z-40 max-w-3xl lg:w-[750px] overflow-visible w-full border border-n-weak bg-n-alpha-3 backdrop-blur-[100px] shadow-lg rounded-xl p-6 grid gap-6"
+    class="z-40 w-[min(34rem,calc(100vw-2rem))] lg:w-[750px] overflow-visible border border-n-weak bg-n-alpha-3 backdrop-blur-[100px] shadow-lg rounded-xl p-6 grid gap-6"
   >
     <h3 class="text-base font-medium leading-6 text-n-slate-12">
       {{ filterModalHeaderTitle }}
     </h3>
     <div v-if="props.isSegmentView">
-      <label class="pb-6 border-b border-n-weak">
-        <div class="mb-2 text-sm text-n-slate-11">
-          {{ $t('CONTACTS_LAYOUT.FILTER.SEGMENT.LABEL') }}
-        </div>
-        <input
+      <div class="pb-6 border-b border-n-weak">
+        <Input
           v-model="segmentNameLocal"
-          class="py-1.5 px-3 text-n-slate-12 bg-n-alpha-1 text-sm rounded-lg reset-base w-full"
+          :label="$t('CONTACTS_LAYOUT.FILTER.SEGMENT.LABEL')"
           :placeholder="t('CONTACTS_LAYOUT.FILTER.SEGMENT.INPUT_PLACEHOLDER')"
         />
-      </label>
+      </div>
     </div>
-    <ul class="grid gap-4 list-none">
+    <ul class="grid gap-4 list-none min-w-0">
       <template v-for="(filter, index) in filters" :key="filter.id">
         <ConditionRow
           v-if="index === 0"
@@ -129,7 +127,7 @@ const outsideClickHandler = [
           v-model:attribute-key="filter.attributeKey"
           v-model:filter-operator="filter.filterOperator"
           v-model:values="filter.values"
-          :filter-types="filterTypes"
+          :filter-types="attributeFilterTypes"
           :show-query-operator="false"
           @remove="removeFilter(index)"
         />
@@ -142,16 +140,16 @@ const outsideClickHandler = [
           v-model:query-operator="filters[index - 1].queryOperator"
           v-model:values="filter.values"
           show-query-operator
-          :filter-types="filterTypes"
+          :filter-types="attributeFilterTypes"
           @remove="removeFilter(index)"
         />
       </template>
     </ul>
     <div class="flex justify-between gap-2">
-      <Button sm ghost blue @click="addFilter">
+      <Button sm ghost blue class="flex-shrink-0" @click="addFilter">
         {{ $t('CONTACTS_LAYOUT.FILTER.BUTTONS.ADD_FILTER') }}
       </Button>
-      <div class="flex gap-2">
+      <div class="flex gap-2 flex-shrink-0">
         <Button sm faded slate @click="resetFilter">
           {{ $t('CONTACTS_LAYOUT.FILTER.BUTTONS.CLEAR_FILTERS') }}
         </Button>

@@ -2,7 +2,7 @@
 
 # Description: Install and manage a Chatwoot installation.
 # OS: Ubuntu 20.04 LTS, 22.04 LTS, 24.04 LTS
-# Script Version: 3.2.0
+# Script Version: 3.5.2
 # Run this script as root
 
 set -eu -o errexit -o pipefail -o noclobber -o nounset
@@ -17,9 +17,9 @@ fi
 
 # Global variables
 # option --output/-o requires 1 argument
-LONGOPTS=console,debug,help,install,Install:,logs:,restart,ssl,upgrade,webserver,version
-OPTIONS=cdhiI:l:rsuwv
-CWCTL_VERSION="3.2.0"
+LONGOPTS=console,debug,help,install,Install:,logs:,restart,ssl,upgrade,Upgrade:,webserver,version,web-only,worker-only,convert:
+OPTIONS=cdhiI:l:rsuU:wvWK
+CWCTL_VERSION="3.5.2"
 pg_pass=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 15 ; echo '')
 CHATWOOT_HUB_URL="https://hub.2.chatwoot.com/events"
 
@@ -42,7 +42,7 @@ fi
 # read getopt’s output this way to handle the quoting right:
 eval set -- "$PARSED"
 
-c=n d=n h=n i=n I=n l=n r=n s=n u=n w=n v=n BRANCH=master SERVICE=web
+c=n d=n h=n i=n I=n l=n r=n s=n u=n U=n w=n v=n W=n K=n C=n BRANCH=master SERVICE=web DEPLOYMENT_TYPE=full CONVERT_TO=""
 # Iterate options in order and nicely split until we see --
 while true; do
     case "$1" in
@@ -83,6 +83,12 @@ while true; do
             ;;
         -u|--upgrade)
             u=y
+            BRANCH="master"
+            break
+            ;;
+        -U|--Upgrade)
+            U=y
+            BRANCH="$2"
             break
             ;;
         -w|--webserver)
@@ -92,6 +98,36 @@ while true; do
         -v|--version)
             v=y
             shift
+            ;;
+        -W|--web-only)
+            W=y
+            DEPLOYMENT_TYPE=web
+            shift
+            ;;
+        -K|--worker-only)
+            K=y
+            DEPLOYMENT_TYPE=worker
+            shift
+            ;;
+        --convert)
+            C=y
+            CONVERT_TO="$2"
+            case "$CONVERT_TO" in
+                web)
+                    DEPLOYMENT_TYPE=web
+                    ;;
+                worker)
+                    DEPLOYMENT_TYPE=worker
+                    ;;
+                full)
+                    DEPLOYMENT_TYPE=full
+                    ;;
+                *)
+                    echo "Invalid conversion type. Use: web, worker, or full"
+                    exit 3
+                    ;;
+            esac
+            shift 2
             ;;
         --)
             shift
@@ -107,7 +143,7 @@ done
 # log if debug flag set
 if [ "$d" == "y" ]; then
   echo "console: $c, debug: $d, help: $h, install: $i, Install: $I, BRANCH: $BRANCH, \
-  logs: $l, SERVICE: $SERVICE, ssl: $s, upgrade: $u, webserver: $w"
+  logs: $l, SERVICE: $SERVICE, ssl: $s, upgrade: $u, Upgrade: $U, webserver: $w, web-only: $W, worker-only: $K, convert: $C, convert-to: $CONVERT_TO, deployment-type: $DEPLOYMENT_TYPE"
 fi
 
 # exit if script is not run as root
@@ -173,11 +209,11 @@ EOF
 function install_dependencies() {
   apt-get update && apt-get upgrade -y
   apt-get install -y curl
-  curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+  curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/redis-archive-keyring.gpg
   echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
   mkdir -p /etc/apt/keyrings
-  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-  NODE_MAJOR=23
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+  NODE_MAJOR=24
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
   echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg 16" > /etc/apt/sources.list.d/pgdg.list
   wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
@@ -192,9 +228,103 @@ function install_dependencies() {
       postgresql-client-16 redis-tools \
       nodejs patch ruby-dev zlib1g-dev liblzma-dev \
       libgmp-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev sudo \
-      libvips python3-pip
+      python3-pip
   npm install -g pnpm
 }
+
+# Check Rails' required API and the GIF encoder used for image variants.
+function libvips_is_compatible() {
+  python3 - "${1:-}" 2>/dev/null <<'PY'
+import sys
+from ctypes import CDLL, c_char_p, c_size_t
+
+vips = CDLL('libvips.so.42')
+if vips.vips_init(b'chatwoot-libvips-check') != 0:
+    raise SystemExit(1)
+
+vips.vips_block_untrusted_set(1)
+vips.vips_type_find.argtypes = [c_char_p, c_char_p]
+vips.vips_type_find.restype = c_size_t
+if not vips.vips_type_find(b'VipsOperation', b'gifsave'):
+    raise SystemExit(1)
+
+if sys.argv[1]:
+    installed = tuple(vips.vips_version(part) for part in range(3))
+    minimum = tuple(map(int, sys.argv[1].split('.')))
+    if installed < minimum:
+        raise SystemExit(1)
+PY
+}
+
+function install_libvips() (
+  local vips_version=8.18.7 build_dir archive
+  local loader_config=/etc/ld.so.conf.d/00-chatwoot-libvips.conf minimum_version=
+  # APT maintains distro packages. Apply the pin to the source build that cwctl activates.
+  if [[ -f "$loader_config" ]]; then
+    minimum_version="$vips_version"
+  fi
+
+  if libvips_is_compatible "$minimum_version"; then
+    return
+  fi
+
+  apt-get update
+  apt-get install -y libvips
+  if libvips_is_compatible "$minimum_version"; then
+    return
+  fi
+
+  # Ubuntu 20.04 and 22.04 package libvips versions below Rails' 8.13 minimum.
+  build_dir=$(mktemp -d)
+  trap 'rm -rf -- "$build_dir"' EXIT
+  archive="$build_dir/vips-$vips_version.tar.xz"
+
+  apt-get install -y --no-install-recommends build-essential ca-certificates curl ninja-build pkg-config python3-venv xz-utils \
+    libglib2.0-dev libexpat1-dev libjpeg-dev libpng-dev libwebp-dev libtiff-dev \
+    libheif-dev libexif-dev liblcms2-dev libimagequant-dev
+
+  curl --fail --location --silent --show-error \
+    "https://github.com/libvips/libvips/releases/download/v$vips_version/vips-$vips_version.tar.xz" --output "$archive"
+  printf '%s  %s\n' '5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94' "$archive" | sha256sum --check
+  tar -xf "$archive" -C "$build_dir"
+
+  # Focal's Meson package is too old. Use a verified wheel that supports its Python.
+  python3 -m venv "$build_dir/venv"
+  printf '%s\n' 'meson==1.8.5 --hash=sha256:15ab2cca08271bc055bc33a4929b7c58f15ad67df4c1fa65dc223e822b882bef' | \
+    "$build_dir/venv/bin/python" -m pip install --require-hashes --only-binary=:all: -r /dev/stdin
+  local meson="$build_dir/venv/bin/meson"
+
+  if apt-cache show libcgif-dev >/dev/null 2>&1; then
+    apt-get install -y --no-install-recommends libcgif-dev
+  else
+    # Ubuntu 20.04 has no libcgif-dev. Link cgif statically into libvips.
+    local cgif_version=0.5.4 cgif_archive="$build_dir/cgif.tar.gz"
+    curl --fail --location --silent --show-error \
+      "https://codeload.github.com/dloebl/cgif/tar.gz/refs/tags/v$cgif_version" --output "$cgif_archive"
+    printf '%s  %s\n' '83a70a15bc2da41f081a44ebc58ee48e2e1d524a6d3fdb4a24064afa08d5ad4d' "$cgif_archive" | sha256sum --check
+    tar -xf "$cgif_archive" -C "$build_dir"
+    "$meson" setup "$build_dir/cgif-build" "$build_dir/cgif-$cgif_version" \
+      --prefix="$build_dir/cgif" --libdir=lib --buildtype=release --default-library=static --wrap-mode=nodownload
+    "$meson" install -C "$build_dir/cgif-build"
+    export PKG_CONFIG_PATH="$build_dir/cgif/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  fi
+
+  "$meson" setup "$build_dir/build" "$build_dir/vips-$vips_version" \
+    --prefix=/usr/local --libdir=lib/chatwoot-libvips --buildtype=release --wrap-mode=nodownload \
+    -Dintrospection=disabled -Dcgif=enabled -Dimagequant=enabled
+  "$meson" compile -C "$build_dir/build" -j 2
+  # Use the new build before replacing any installed library.
+  VIPS_BLOCK_UNTRUSTED=1 "$build_dir/build/tools/vips" black "$build_dir/probe.gif" 2 2 --bands 3
+  "$meson" install -C "$build_dir/build"
+  # Resolve the newer library before Ubuntu's copy with the same SONAME.
+  printf '%s\n' '/usr/local/lib/chatwoot-libvips' >| "$loader_config"
+  ldconfig
+
+  if ! libvips_is_compatible "$vips_version"; then
+    echo "Unable to load libvips $vips_version or later with operation blocking and GIF encoding." >&2
+    return 1
+  fi
+)
 
 ##############################################################################
 # Install postgres and redis
@@ -338,12 +468,15 @@ function setup_chatwoot() {
   sudo -i -u chatwoot << EOF
   rvm --version
   rvm autolibs disable
-  rvm install "ruby-3.4.4"
-  rvm use 3.4.4 --default
 
   git clone https://github.com/chatwoot/chatwoot.git
   cd chatwoot
   git checkout "$BRANCH"
+
+  ruby_version="\$(cat .ruby-version)"
+  rvm install "ruby-\$ruby_version"
+  rvm use "\$ruby_version" --default
+
   bundle
   pnpm i
 
@@ -379,23 +512,104 @@ EOF
 ##############################################################################
 # Setup Chatwoot systemd services and cwctl CLI
 # Globals:
-#   None
+#   DEPLOYMENT_TYPE
 # Arguments:
 #   None
 # Outputs:
 #   None
 ##############################################################################
 function configure_systemd_services() {
-  cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
-  cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
-  cp /home/chatwoot/chatwoot/deployment/chatwoot.target /etc/systemd/system/chatwoot.target
+  # Check if this is a conversion from existing deployment
+  local existing_full_deployment=false
+  if [ -f "/etc/systemd/system/chatwoot.target" ]; then
+    existing_full_deployment=true
+  fi
+
+  if [ "$DEPLOYMENT_TYPE" == "web" ]; then
+    echo "Setting up web-only deployment"
+
+    # Stop and disable existing services if converting
+    if [ "$existing_full_deployment" = true ]; then
+      echo "Converting from full deployment to web-only"
+      systemctl stop chatwoot.target || true
+      systemctl disable chatwoot.target || true
+      systemctl stop chatwoot-worker.1.service || true
+      systemctl disable chatwoot-worker.1.service || true
+    fi
+
+    # Stop and disable worker target if converting from worker-only
+    if [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+      echo "Converting from worker-only to web-only"
+      systemctl stop chatwoot-worker.target || true
+      systemctl disable chatwoot-worker.target || true
+    fi
+
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.target /etc/systemd/system/chatwoot-web.target
+
+    systemctl daemon-reload
+    systemctl enable chatwoot-web.target
+    systemctl start chatwoot-web.target
+
+  elif [ "$DEPLOYMENT_TYPE" == "worker" ]; then
+    echo "Setting up worker-only deployment"
+
+    # Stop and disable existing services if converting
+    if [ "$existing_full_deployment" = true ]; then
+      echo "Converting from full deployment to worker-only"
+      systemctl stop chatwoot.target || true
+      systemctl disable chatwoot.target || true
+      systemctl stop chatwoot-web.1.service || true
+      systemctl disable chatwoot-web.1.service || true
+    fi
+
+    # Stop and disable web target if converting from web-only
+    if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+      echo "Converting from web-only to worker-only"
+      systemctl stop chatwoot-web.target || true
+      systemctl disable chatwoot-web.target || true
+    fi
+
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.target /etc/systemd/system/chatwoot-worker.target
+
+    systemctl daemon-reload
+    systemctl enable chatwoot-worker.target
+    systemctl start chatwoot-worker.target
+
+  else
+    echo "Setting up full deployment (web + worker)"
+
+    # Stop existing specialized deployments if converting back to full
+    if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+      echo "Converting from web-only to full deployment"
+      systemctl stop chatwoot-web.target || true
+      systemctl disable chatwoot-web.target || true
+    fi
+    if [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+      echo "Converting from worker-only to full deployment"
+      systemctl stop chatwoot-worker.target || true
+      systemctl disable chatwoot-worker.target || true
+    fi
+
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot.target /etc/systemd/system/chatwoot.target
+
+    systemctl daemon-reload
+    systemctl enable chatwoot.target
+    systemctl start chatwoot.target
+  fi
 
   cp /home/chatwoot/chatwoot/deployment/chatwoot /etc/sudoers.d/chatwoot
-  cp /home/chatwoot/chatwoot/deployment/setup_20.04.sh /usr/local/bin/cwctl
-  chmod +x /usr/local/bin/cwctl
 
-  systemctl enable chatwoot.target
-  systemctl start chatwoot.target
+  # Bash may still be reading the installed script during a conversion.
+  (
+    cwctl_tmp=$(mktemp /usr/local/bin/.cwctl.XXXXXX)
+    trap 'rm -f -- "$cwctl_tmp"' EXIT
+    command install -m 0755 /home/chatwoot/chatwoot/deployment/setup_20.04.sh "$cwctl_tmp"
+    mv -fT -- "$cwctl_tmp" /usr/local/bin/cwctl
+  )
 }
 
 ##############################################################################
@@ -427,7 +641,15 @@ function setup_ssl() {
   cd chatwoot
   sed -i "s/http:\/\/0.0.0.0:3000/https:\/\/$domain_name/g" .env
 EOF
-  systemctl restart chatwoot.target
+
+  # Restart the appropriate chatwoot target
+  if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+    systemctl restart chatwoot-web.target
+  elif [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+    systemctl restart chatwoot-worker.target
+  else
+    systemctl restart chatwoot.target
+  fi
 }
 
 ##############################################################################
@@ -511,6 +733,7 @@ EOF
 
   echo -en "\n➥ 1/9 Installing dependencies. This takes a while.\n"
   install_dependencies &>> "${LOG_FILE}"
+  install_libvips &>> "${LOG_FILE}"
 
   if [ "$install_pg_redis" != "no" ]; then
     echo "➥ 2/9 Installing databases."
@@ -624,17 +847,27 @@ Usage: cwctl [OPTION]...
 Install and manage your Chatwoot installation.
 
 Example: cwctl -i master
+Example: cwctl -i --web-only     (for web server ASG)
+Example: cwctl -i --worker-only  (for worker ASG)
+Example: cwctl --convert web     (convert existing to web-only)
+Example: cwctl --convert worker  (convert existing to worker-only)
+Example: cwctl --convert full    (convert back to full deployment)
+Example: cwctl --upgrade         (upgrade to latest master)
+Example: cwctl -U develop        (upgrade to develop branch)
 Example: cwctl -l web
 Example: cwctl --logs worker
-Example: cwctl --upgrade
 Example: cwctl -c
 
 Installation/Upgrade:
   -i, --install             Install the latest stable version of Chatwoot
-  -I                        Install Chatwoot from a git branch
+  -I BRANCH                 Install Chatwoot from a git branch
   -u, --upgrade             Upgrade Chatwoot to the latest stable version
+  -U BRANCH                 Upgrade Chatwoot from a git branch (EXPERIMENTAL)
   -s, --ssl                 Fetch and install SSL certificates using LetsEncrypt
   -w, --webserver           Install and configure Nginx webserver with SSL
+  -W, --web-only            Install only the web server (for ASG deployment)
+  -K, --worker-only         Install only the background worker (for ASG deployment)
+      --convert TYPE        Convert existing deployment (TYPE: web, worker, full)
 
 Management:
   -c, --console             Open ruby console
@@ -720,7 +953,6 @@ EOF
 
 ##############################################################################
 # Update redis to v7+ for Rails 7 support(-u/--upgrade)
-# and install libvips for image processing support in Rails 7
 # Globals:
 #   None
 # Arguments:
@@ -753,16 +985,15 @@ function upgrade_redis() {
 
   echo "Upgrading Redis to v7+ for Rails 7 support(Chatwoot v2.17+)"
 
-  curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+  curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor --yes -o /usr/share/keyrings/redis-archive-keyring.gpg
   echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
   apt-get update -y
   apt-get upgrade redis-server -y
-  apt-get install libvips -y
 }
 
 
 ##############################################################################
-# Update nodejs to v20+
+# Update Node.js to a patched v24.x release
 # Globals:
 #   None
 # Arguments:
@@ -771,6 +1002,8 @@ function upgrade_redis() {
 #   None
 ##############################################################################
 function upgrade_node() {
+  local minimum_node_version="24.22.1"
+
   echo "Checking Node.js version..."
 
   # Get current Node.js version
@@ -779,20 +1012,27 @@ function upgrade_node() {
   # Parse major version number
   major_version=$(echo "$current_version" | cut -d. -f1)
 
-  if [ "$major_version" -ge 23 ]; then
-    echo "Node.js is already version $current_version (>= 23.x). Skipping Node.js upgrade."
+  if [ "$major_version" -eq 24 ] && dpkg --compare-versions "$current_version" ge "$minimum_node_version"; then
+    echo "Node.js is already version $current_version (>= $minimum_node_version on 24.x). Skipping Node.js upgrade."
     return
   fi
 
-  echo "Upgrading Node.js version to v23.x"
+  echo "Upgrading Node.js version to v24.x"
   mkdir -p /etc/apt/keyrings
-  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-  NODE_MAJOR=23
+  curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg
+  NODE_MAJOR=24
   echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
 
   apt-get update
   apt-get install nodejs -y
 
+  current_version=$(node --version | cut -c 2-)
+  major_version=$(echo "$current_version" | cut -d. -f1)
+
+  if [ "$major_version" -ne 24 ] || ! dpkg --compare-versions "$current_version" ge "$minimum_node_version"; then
+    echo "Node.js 24.x version $minimum_node_version or newer is required; found $current_version after upgrading." >&2
+    return 1
+  fi
 }
 
 ##############################################################################
@@ -831,13 +1071,37 @@ EOF
 function upgrade() {
   cwctl_upgrade_check
   get_cw_version
-  echo "Upgrading Chatwoot to v$CW_VERSION"
+  echo "Upgrading Chatwoot to v$CW_VERSION (branch: $BRANCH)"
+
+  # Warning for non-master branch upgrades
+  if [ "$BRANCH" != "master" ]; then
+    cat << EOF
+
+⚠️  WARNING: Branch-specific upgrades are EXPERIMENTAL
+⚠️  Switching between different versions/branches may cause:
+   - Database migration conflicts
+   - Asset compilation errors
+   - Configuration incompatibilities
+   - Data corruption or loss
+
+⚠️  This is NOT recommended for production environments.
+⚠️  Always backup your database before proceeding.
+
+EOF
+    read -p "Do you understand the risks and want to continue? [y/N]: " user_input
+    user_input=${user_input:-N}
+    if [[ ! "$user_input" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+      echo "Upgrade cancelled."
+      exit 1
+    fi
+  fi
+
   sleep 3
 
    # Check if CW_VERSION is 4.0 or above
   if [[ "$(printf '%s\n' "$CW_VERSION" "4.0" | sort -V | head -n 1)" == "4.0" ]]; then
     echo "Chatwoot v4.0 and above requires pgvector support in PostgreSQL."
-    read -p "Does your postgres support pgvector and want to proceed with the upgrade? [Y/n]: " user_input
+    read -p "Does your postgres support pgvector and want to proceed with the upgrade? [y/N]: " user_input
     user_input=${user_input:-Y}
     if [[ "$user_input" =~ ^([yY][eE][sS]|[yY])$ ]]; then
       echo "Proceeding with the upgrade..."
@@ -849,22 +1113,25 @@ function upgrade() {
   fi
 
   upgrade_prereq
+  install_libvips
   upgrade_redis
   upgrade_node
   get_pnpm
-  sudo -i -u chatwoot << "EOF"
+
+  sudo -i -u chatwoot << EOF
 
   # Navigate to the Chatwoot directory
   cd chatwoot
 
-  # Pull the latest version of the master branch
-  git checkout master && git pull
+  # Pull the latest version of the specified branch
+  git fetch
+  git checkout "$BRANCH" && git pull
 
   # Ensure the ruby version is upto date
   # Parse the latest ruby version
-  latest_ruby_version="$(cat '.ruby-version')"
-  rvm install "ruby-$latest_ruby_version"
-  rvm use "$latest_ruby_version" --default
+  latest_ruby_version="\$(cat '.ruby-version')"
+  rvm install "ruby-\$latest_ruby_version"
+  rvm use "\$latest_ruby_version" --default
 
   # Update dependencies
   bundle
@@ -878,18 +1145,35 @@ function upgrade() {
 
 EOF
 
-  # Copy the updated targets
-  cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
-  cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
-  cp /home/chatwoot/chatwoot/deployment/chatwoot.target /etc/systemd/system/chatwoot.target
+  # Copy the updated services and targets based on existing deployment
+  if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+    echo "Updating web-only deployment"
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.target /etc/systemd/system/chatwoot-web.target
+  elif [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+    echo "Updating worker-only deployment"
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.target /etc/systemd/system/chatwoot-worker.target
+  else
+    echo "Updating full deployment"
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot.target /etc/systemd/system/chatwoot.target
+  fi
 
   cp /home/chatwoot/chatwoot/deployment/chatwoot /etc/sudoers.d/chatwoot
   # TODO:(@vn) handle cwctl updates
 
   systemctl daemon-reload
 
-  # Restart the chatwoot server
-  systemctl restart chatwoot.target
+  # Restart the appropriate chatwoot target
+  if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+    systemctl restart chatwoot-web.target
+  elif [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+    systemctl restart chatwoot-worker.target
+  else
+    systemctl restart chatwoot.target
+  fi
 
 }
 
@@ -903,8 +1187,40 @@ EOF
 #   None
 ##############################################################################
 function restart() {
-  systemctl restart chatwoot.target
-  systemctl status chatwoot.target
+  if [ -f "/etc/systemd/system/chatwoot-web.target" ]; then
+    systemctl restart chatwoot-web.target
+    systemctl status chatwoot-web.target
+  elif [ -f "/etc/systemd/system/chatwoot-worker.target" ]; then
+    systemctl restart chatwoot-worker.target
+    systemctl status chatwoot-worker.target
+  else
+    systemctl restart chatwoot.target
+    systemctl status chatwoot.target
+  fi
+}
+
+##############################################################################
+# Convert existing Chatwoot deployment to different type (--convert)
+# Globals:
+#   DEPLOYMENT_TYPE
+# Arguments:
+#   None
+# Outputs:
+#   None
+##############################################################################
+function convert_deployment() {
+  echo "Converting Chatwoot deployment to: $DEPLOYMENT_TYPE"
+
+  # Check if Chatwoot is installed
+  if [ ! -d "/home/chatwoot/chatwoot" ]; then
+    echo "Chatwoot installation not found. Use --install first."
+    exit 1
+  fi
+
+  # Run the systemd service configuration which handles conversion logic
+  configure_systemd_services
+
+  echo "Deployment converted successfully to: $DEPLOYMENT_TYPE"
 }
 
 ##############################################################################
@@ -1107,7 +1423,7 @@ function main() {
     ssl
   fi
 
-  if [ "$u" == "y" ]; then
+  if [ "$u" == "y" ] || [ "$U" == "y" ]; then
     report_event "cwctl" "upgrade"  > /dev/null 2>&1
     upgrade
   fi
@@ -1120,6 +1436,11 @@ function main() {
   if [ "$v" == "y" ]; then
     report_event "cwctl" "version"  > /dev/null 2>&1
     version
+  fi
+
+  if [ "$C" == "y" ]; then
+    report_event "cwctl" "convert"  > /dev/null 2>&1
+    convert_deployment
   fi
 
 }

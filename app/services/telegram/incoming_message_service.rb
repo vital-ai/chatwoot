@@ -77,7 +77,13 @@ class Telegram::IncomingMessageService
   end
 
   def set_conversation
-    @conversation = @contact_inbox.conversations.first
+    # if lock to single conversation is disabled, we will create a new conversation if previous conversation is resolved
+    @conversation = if @inbox.lock_to_single_conversation
+                      @contact_inbox.conversations.last
+                    else
+                      @contact_inbox.conversations
+                                    .where.not(status: :resolved).last
+                    end
     return if @conversation
 
     @conversation = ::Conversation.create!(conversation_params)
@@ -144,16 +150,16 @@ class Telegram::IncomingMessageService
       return
     end
 
-    attachment_file = Down.download(
-      inbox.channel.get_telegram_file_path(file[:file_id])
-    )
+    attachment_file = Down.download(file_download_path)
 
     @message.attachments.new(
       account_id: @message.account_id,
       file_type: file_content_type,
       file: {
         io: attachment_file,
-        filename: attachment_file.original_filename,
+        # Telegram's download URL uses an internal storage path, so Down derives a generic name from it.
+        # Prefer the original filename from the payload (present for document/audio/video) when available.
+        filename: file[:file_name].presence || attachment_file.original_filename,
         content_type: attachment_file.content_type
       }
     )

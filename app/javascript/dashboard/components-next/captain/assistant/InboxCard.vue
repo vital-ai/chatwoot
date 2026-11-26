@@ -57,9 +57,14 @@ const menuItems = computed(() => [
   },
 ]);
 
-const icon = computed(() =>
-  getInboxIconByType(props.inbox.channel_type, '', 'outline')
-);
+const icon = computed(() => {
+  const {
+    medium,
+    channel_type: type,
+    voice_enabled: voiceEnabled,
+  } = props.inbox;
+  return getInboxIconByType(type, medium, 'outline', voiceEnabled);
+});
 
 const handleAction = ({ action, value }) => {
   toggleDropdown(false);

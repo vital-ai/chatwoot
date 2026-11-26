@@ -1,10 +1,10 @@
 <script>
 import TemplatesPicker from './TemplatesPicker.vue';
-import TemplateParser from './TemplateParser.vue';
+import WhatsAppTemplateReply from './WhatsAppTemplateReply.vue';
 export default {
   components: {
     TemplatesPicker,
-    TemplateParser,
+    WhatsAppTemplateReply,
   },
   props: {
     show: {
@@ -14,6 +14,14 @@ export default {
     inboxId: {
       type: Number,
       default: undefined,
+    },
+    sendRenderedContent: {
+      type: Boolean,
+      default: false,
+    },
+    requestContactInfoOnly: {
+      type: Boolean,
+      default: false,
     },
   },
   emits: ['onSend', 'cancel', 'update:show'],
@@ -37,6 +45,14 @@ export default {
             templateName: this.selectedWaTemplate.name,
           })
         : this.$t('WHATSAPP_TEMPLATES.MODAL.SUBTITLE');
+    },
+  },
+  watch: {
+    inboxId() {
+      this.selectedWaTemplate = null;
+    },
+    requestContactInfoOnly() {
+      this.selectedWaTemplate = null;
     },
   },
   methods: {
@@ -66,11 +82,13 @@ export default {
       <TemplatesPicker
         v-if="!selectedWaTemplate"
         :inbox-id="inboxId"
+        :request-contact-info-only="requestContactInfoOnly"
         @on-select="pickTemplate"
       />
-      <TemplateParser
+      <WhatsAppTemplateReply
         v-else
         :template="selectedWaTemplate"
+        :send-rendered-content="sendRenderedContent"
         @reset-template="onResetTemplate"
         @send-message="onSendMessage"
       />

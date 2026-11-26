@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Senden nicht möglich, versuchen Sie es noch einmal"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Nicht verfügbar"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Wir sind online",
-    "OFFLINE": "Wir sind momentan abwesend"
+    "OFFLINE": "Wir sind momentan abwesend",
+    "BACK_AS_SOON_AS_POSSIBLE": "Wir sind so bald wie möglich wieder erreichbar"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Wir antworten üblicherweise innerhalb weniger Minuten",
     "IN_A_FEW_HOURS": "Wir antworten üblicherweise innerhalb weniger Stunden",
     "IN_A_DAY": "Wir antworten üblicherweise innerhalb eines Tages",
-    "BACK_IN": "Wir werden wieder online sein"
+    "BACK_IN_HOURS": "Wir sind in {n} Stunde wieder online | Wir sind in {n} Stunden wieder online",
+    "BACK_IN_MINUTES": "Wir sind in {time} Minuten wieder online",
+    "BACK_AT_TIME": "Wir sind ab {time} wieder online",
+    "BACK_ON_DAY": "Wir sind am {day} wieder online",
+    "BACK_TOMORROW": "Wir sind morgen wieder online",
+    "BACK_IN_SOME_TIME": "Wir sind bald wieder online"
   },
   "DAY_NAMES": {
     "SUNDAY": "Sonntag",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Chatten Sie mit uns"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Unterstützt von Chatwoot",
   "EMAIL_PLACEHOLDER": "Bitte geben Sie Ihre E-Mail-Adresse ein",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Schreiben Sie Ihre Nachricht",
   "TODAY": "Heute",
   "YESTERDAY": "Gestern",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Emojis durchsuchen",
     "NOT_FOUND": "Kein Emoji entspricht Ihrer Suche",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Emojis suchen …",
+    "FREQUENTLY_USED": "Häufig verwendet",
+    "NO_EMOJI": "Kein Emoji entspricht deiner Suche"
   },
   "CSAT": {
     "TITLE": "Bewerten Sie Ihre Konversation",

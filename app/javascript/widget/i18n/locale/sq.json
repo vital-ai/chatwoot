@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Nuk mund të dërgohej, provo sërish"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Nuk është i disponueshëm"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Ne jemi online",
-    "OFFLINE": "Nuk jemi online për momentin"
+    "OFFLINE": "Nuk jemi online për momentin",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Zakonisht përgjigjet brenda pak minutash",
     "IN_A_FEW_HOURS": "Zakonisht përgjigjemi brenda disa orësh",
     "IN_A_DAY": "Zakonisht përgjigjemi brenda një dite",
-    "BACK_IN": "Ne do të kthehemi serish online"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "E diele",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Chat with us"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Powered by Chatwoot",
   "EMAIL_PLACEHOLDER": "Please enter your email",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Shkruani mesazhin tuaj",
   "TODAY": "Sot",
   "YESTERDAY": "Dje",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Search emojis",
     "NOT_FOUND": "No emoji match your search",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "No emoji match your search"
   },
   "CSAT": {
     "TITLE": "Rate your conversation",

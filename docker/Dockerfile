@@ -1,8 +1,18 @@
 # pre-build stage
-FROM node:23-alpine as node
-FROM ruby:3.4.4-alpine3.21 AS pre-builder
+FROM node:24.22.1-alpine as node
 
-ARG NODE_VERSION="23.7.0"
+# npm and corepack are only needed to build assets and to install pnpm in
+# non-production images; production only runs the node binary
+FROM node AS node-modules
+ARG RAILS_ENV=production
+RUN if [ "$RAILS_ENV" = "production" ]; then \
+  rm -rf /usr/local/lib/node_modules/* \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack; \
+  fi
+
+FROM ruby:3.4.13-alpine3.23 AS pre-builder
+
+ARG NODE_VERSION="24.22.1"
 ARG PNPM_VERSION="10.2.0"
 ENV NODE_VERSION=${NODE_VERSION}
 ENV PNPM_VERSION=${PNPM_VERSION}
@@ -11,7 +21,7 @@ ENV PNPM_VERSION=${PNPM_VERSION}
 # For development docker-compose file overrides ARGS
 ARG BUNDLE_WITHOUT="development:test"
 ENV BUNDLE_WITHOUT ${BUNDLE_WITHOUT}
-ENV BUNDLER_VERSION=2.6.9
+ENV BUNDLER_VERSION=2.5.16
 
 ARG RAILS_SERVE_STATIC_FILES=true
 ENV RAILS_SERVE_STATIC_FILES ${RAILS_SERVE_STATIC_FILES}
@@ -35,7 +45,7 @@ RUN apk update && apk add --no-cache \
   curl \
   xz \
   && mkdir -p /var/app \
-  && gem install bundler
+  && gem install bundler -v "$BUNDLER_VERSION"
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/
 COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
@@ -83,7 +93,7 @@ RUN mkdir -p /app/log
 # generate production assets if production environment
 RUN if [ "$RAILS_ENV" = "production" ]; then \
   SECRET_KEY_BASE=precompile_placeholder RAILS_LOG_TO_STDOUT=enabled bundle exec rake assets:precompile \
-  && rm -rf spec node_modules tmp/cache; \
+  && rm -rf spec tests node_modules tmp/cache; \
   fi
 
 # Generate .git_sha file with current commit hash
@@ -96,16 +106,16 @@ RUN rm -rf /gems/ruby/3.4.0/cache/*.gem \
   && rm .gitignore
 
 # final build stage
-FROM ruby:3.4.4-alpine3.21
+FROM ruby:3.4.13-alpine3.23
 
-ARG NODE_VERSION="23.7.0"
+ARG NODE_VERSION="24.22.1"
 ARG PNPM_VERSION="10.2.0"
 ENV NODE_VERSION=${NODE_VERSION}
 ENV PNPM_VERSION=${PNPM_VERSION}
 
 ARG BUNDLE_WITHOUT="development:test"
 ENV BUNDLE_WITHOUT ${BUNDLE_WITHOUT}
-ENV BUNDLER_VERSION=2.6.9
+ENV BUNDLER_VERSION=2.5.16
 
 ARG EXECJS_RUNTIME="Disabled"
 ENV EXECJS_RUNTIME ${EXECJS_RUNTIME}
@@ -120,7 +130,8 @@ ARG RAILS_ENV=production
 ENV RAILS_ENV ${RAILS_ENV}
 ENV BUNDLE_PATH="/gems"
 
-RUN apk update && apk add --no-cache \
+# apk upgrade picks up Alpine security fixes released after the base image
+RUN apk update && apk upgrade --no-cache && apk add --no-cache \
   build-base \
   openssl \
   tzdata \
@@ -128,10 +139,13 @@ RUN apk update && apk add --no-cache \
   imagemagick \
   git \
   vips \
-  && gem install bundler
+  && gem install bundler -v "$BUNDLER_VERSION"
+
+# Restrict libvips to its trusted image loaders when generating variants
+ENV VIPS_BLOCK_UNTRUSTED=1
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/
-COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node-modules /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 RUN if [ "$RAILS_ENV" != "production" ]; then \
   apk add --no-cache curl \

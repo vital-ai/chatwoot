@@ -46,11 +46,11 @@ export const getTypingUsersText = (users = []) => {
 export const createPendingMessage = data => {
   const timestamp = Math.floor(new Date().getTime() / 1000);
   const tempMessageId = getUuid();
-  const { message, file } = data;
+  const { message, pendingMessageContent, file } = data;
   const tempAttachments = [{ id: tempMessageId }];
   const pendingMessage = {
     ...data,
-    content: message || null,
+    content: pendingMessageContent || message || null,
     id: tempMessageId,
     echo_id: tempMessageId,
     status: MESSAGE_STATUS.PROGRESS,
@@ -84,6 +84,15 @@ export const convertToPortalSlug = text => {
     .replace(/ +/g, '-');
 };
 
+export const convertToArticleSlug = text => {
+  return text
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
 /**
  * Strip curly braces, commas and leading/trailing whitespace from a search key.
  * Eg. "{{contact.name}}," => "contact.name"
@@ -95,4 +104,19 @@ export const sanitizeVariableSearchKey = (searchKey = '') => {
     .replace(/[{}]/g, '') // remove all curly braces
     .replace(/,/g, '') // remove commas
     .trim();
+};
+
+/**
+ * Convert underscore-separated string to title case.
+ * Eg. "round_robin" => "Round Robin"
+ * @param {string} str
+ * @returns {string}
+ */
+export const formatToTitleCase = str => {
+  return (
+    str
+      ?.replace(/_/g, ' ')
+      .replace(/\b\w/g, l => l.toUpperCase())
+      .trim() || ''
+  );
 };

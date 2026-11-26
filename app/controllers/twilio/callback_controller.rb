@@ -1,4 +1,7 @@
 class Twilio::CallbackController < ApplicationController
+  include WebhookUrlHelper
+  include TwilioMessagingSignatureVerification
+
   def create
     Webhooks::TwilioEventsJob.perform_later(permitted_params.to_unsafe_hash)
 
@@ -6,6 +9,15 @@ class Twilio::CallbackController < ApplicationController
   end
 
   private
+
+  def twilio_channel
+    Twilio::IncomingMessageService.find_channel(permitted_params)
+  end
+
+  # The URL Twilio was given and signs: on WEBHOOK_BASE_URL (Vital's fork), not FRONTEND_URL.
+  def twilio_webhook_url
+    webhook_url('/twilio/callback')
+  end
 
   def permitted_params # rubocop:disable Metrics/MethodLength
     params.permit(
@@ -16,6 +28,7 @@ class Twilio::CallbackController < ApplicationController
       :ToZip,
       :AccountSid,
       :MessageSid,
+      :OriginalRepliedMessageSid,
       :FromCountry,
       :ToCity,
       :FromCity,
@@ -30,7 +43,22 @@ class Twilio::CallbackController < ApplicationController
       :NumMedia,
       :Latitude,
       :Longitude,
-      :MessageType
+      :MessageType,
+      :ProfileName,
+      :ExternalUserId,
+      :ParentExternalUserId,
+      :ProfileUsername,
+      :Username,
+      :ReferralBody,
+      :ReferralHeadline,
+      :ReferralSourceId,
+      :ReferralSourceType,
+      :ReferralSourceUrl,
+      :ReferralMediaId,
+      :ReferralMediaContentType,
+      :ReferralMediaUrl,
+      :ReferralNumMedia,
+      :ReferralCtwaClid
     )
   end
 end

@@ -51,6 +51,7 @@ export const conversationListPageURL = ({
   } else if (conversationType) {
     const urlMap = {
       mention: 'mentions/conversations',
+      participating: 'participating/conversations',
       unattended: 'unattended/conversations',
     };
     url = `accounts/${accountId}/${urlMap[conversationType]}`;
@@ -124,4 +125,38 @@ export const getHostNameFromURL = url => {
   } catch (error) {
     return null;
   }
+};
+
+// Shared with the mobile app via @chatwoot/utils.
+export { extractFilenameFromUrl } from '@chatwoot/utils';
+
+/**
+ * Normalizes a comma/newline separated list of domains
+ * @param {string} domains - The comma/newline separated list of domains
+ * @returns {string} - The normalized list of domains
+ * - Converts newlines to commas
+ * - Trims whitespace
+ * - Lowercases entries
+ * - Removes empty values
+ * - De-duplicates while preserving original order
+ */
+export const sanitizeAllowedDomains = domains => {
+  if (!domains) return '';
+
+  const tokens = domains
+    .replace(/\r\n/g, '\n')
+    .replace(/\s*\n\s*/g, ',')
+    .split(',')
+    .map(d => d.trim().toLowerCase())
+    .filter(d => d.length > 0);
+
+  // De-duplicate while preserving order using Set and filter index
+  const seen = new Set();
+  const unique = tokens.filter(d => {
+    if (seen.has(d)) return false;
+    seen.add(d);
+    return true;
+  });
+
+  return unique.join(',');
 };

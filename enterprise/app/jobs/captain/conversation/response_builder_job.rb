@@ -1,20 +1,29 @@
 class Captain::Conversation::ResponseBuilderJob < ApplicationJob
-  MAX_MESSAGE_LENGTH = 10_000
-  retry_on ActiveStorage::FileNotFoundError, attempts: 3
+  include Captain::Conversation::V2LifecycleEvents
+  include Captain::Conversation::MessageBuilder
+  include Captain::Conversation::ResponseLifecycleLogging
 
-  def perform(conversation, assistant)
+  MAX_MESSAGE_LENGTH = 10_000
+  retry_on ActiveStorage::FileNotFoundError, attempts: 3, wait: 2.seconds
+  retry_on Faraday::BadRequestError, attempts: 3, wait: 2.seconds
+
+  def perform(conversation, assistant, responding_to_message_id = nil)
     @conversation = conversation
     @inbox = conversation.inbox
     @assistant = assistant
+    @responding_to_message_id = responding_to_message_id
+
+    return log_non_pending unless conversation_pending?
 
     Current.executed_by = @assistant
 
-    ActiveRecord::Base.transaction do
-      generate_and_process_response
-    end
-  rescue StandardError => e
-    raise e if e.is_a?(ActiveStorage::FileNotFoundError)
+    return log_pre_generation_discard if newer_customer_message_arrived?
 
+    generate_response_with_v2
+  rescue ActiveStorage::FileNotFoundError, Faraday::BadRequestError => e
+    handle_error(e)
+    raise e
+  rescue StandardError => e
     handle_error(e)
   ensure
     Current.executed_by = nil
@@ -24,104 +33,144 @@ class Captain::Conversation::ResponseBuilderJob < ApplicationJob
 
   delegate :account, :inbox, to: :@conversation
 
-  def generate_and_process_response
-    @response = Captain::Llm::AssistantChatService.new(assistant: @assistant).generate_response(
-      @conversation.messages.incoming.last.content,
-      collect_previous_messages
+  def generate_response_with_v2
+    runner_service = v2_runner_service
+    message_history = Captain::Conversation::MessageHistoryBuilderService.new(conversation: @conversation).perform
+    @response = runner_service.generate_response(message_history: message_history)
+    @run_result = runner_service.last_run_result
+
+    @v2_handoff_tool_completed = runner_service.handoff_completed?
+    return process_response if v2_handoff_tool_completed?
+    return if runner_service.response_discarded? || newer_customer_message_arrived?
+
+    process_response
+  end
+
+  def v2_runner_service
+    run_options = Captain::Assistant::AgentRunnerService::RunOptions.new(
+      responding_to_message_id: @responding_to_message_id
     )
-
-    return process_action('handoff') if handoff_requested?
-
-    create_messages
-    Rails.logger.info("[CAPTAIN][ResponseBuilderJob] Incrementing response usage for #{account.id}")
-    account.increment_response_usage
+    Captain::Assistant::AgentRunnerService.new(assistant: @assistant, conversation: @conversation, run_options: run_options)
   end
 
-  def collect_previous_messages
-    @conversation
-      .messages
-      .where(message_type: [:incoming, :outgoing])
-      .where(private: false)
-      .map do |message|
-        {
-          content: message_content(message),
-          role: determine_role(message)
-        }
-      end
-  end
+  def process_response
+    # The V2 runner rescues its own generation errors and signals them via an error
+    # response instead of raising, so the failure event must be emitted here — the
+    # top-level handle_error path only sees exceptions raised outside the runner.
+    record_v2_response_failure(@response['error_reason']) if v2_generation_errored?
 
-  def message_content(message)
-    return message.content if message.content.present?
-    return 'User has shared a message without content' unless message.attachments.any?
-
-    audio_transcriptions = extract_audio_transcriptions(message.attachments)
-    return audio_transcriptions if audio_transcriptions.present?
-
-    'User has shared an attachment'
-  end
-
-  def extract_audio_transcriptions(attachments)
-    audio_attachments = attachments.where(file_type: :audio)
-    return '' if audio_attachments.blank?
-
-    transcriptions = ''
-    audio_attachments.each do |attachment|
-      result = Messages::AudioTranscriptionService.new(attachment).perform
-      transcriptions += result[:transcriptions] if result[:success]
-    end
-    transcriptions
-  end
-
-  def determine_role(message)
-    return 'system' if message.content.blank?
-
-    message.message_type == 'incoming' ? 'user' : 'system'
-  end
-
-  def handoff_requested?
-    @response['response'] == 'conversation_handoff'
-  end
-
-  def process_action(action)
-    case action
-    when 'handoff'
-      I18n.with_locale(@assistant.account.locale) do
-        create_handoff_message
-        @conversation.bot_handoff!
-      end
+    if v2_handoff_tool_fired?
+      process_v2_handoff_response
+    elsif v2_generation_errored?
+      process_error_handoff
+    elsif conversation_pending?
+      process_standard_response
     end
   end
 
-  def create_handoff_message
-    create_outgoing_message(@assistant.config['handoff_message'].presence || I18n.t('conversations.captain.handoff'))
+  def process_standard_response
+    message = nil
+    ActiveRecord::Base.transaction do
+      next if newer_customer_message_arrived?
+
+      message = create_messages
+      Rails.logger.info("[CAPTAIN][ResponseBuilderJob] Incrementing response usage for #{account.id}")
+      account.increment_response_usage
+    end
+    return unless message
+
+    capture_assistant_session(result_message: message, credits_consumed: 1.0)
+    record_v2_response_completed(message)
   end
 
-  def create_messages
-    validate_message_content!(@response['response'])
-    create_outgoing_message(@response['response'])
+  def process_v2_handoff_response
+    return unless v2_handoff_tool_completed? || conversation_pending?
+
+    v2_handoff_tool_completed? ? process_v2_handoff : process_failure_handoff
+    record_v2_failure_handoff(source: Captain::ConversationEvents::Sources::TOOL) unless v2_handoff_tool_completed?
+
+    capture_assistant_session(result_message: @handoff_message, credits_consumed: 0.0)
   end
 
-  def validate_message_content!(content)
-    raise ArgumentError, 'Message content cannot be blank' if content.blank?
+  def v2_handoff_tool_fired? = @response['handoff_tool_called']
+  def v2_handoff_tool_completed? = @v2_handoff_tool_completed == true
+
+  def process_failure_handoff
+    I18n.with_locale(@assistant.account.locale) do
+      Rails.logger.info(
+        "[CAPTAIN][ResponseBuilderJob] Failure handoff for account=#{account.id} conversation=#{@conversation.display_id} " \
+        "reason=#{@response&.dig('action_reason')}"
+      )
+      create_handoff_message
+      @conversation.bot_handoff!
+      send_out_of_office_message_if_applicable
+    end
   end
 
-  def create_outgoing_message(message_content)
-    @conversation.messages.create!(
-      message_type: :outgoing,
-      account_id: account.id,
-      inbox_id: inbox.id,
-      sender: @assistant,
-      content: message_content
+  def process_v2_handoff
+    # HandoffTool already ran bot_handoff! + OOO inside the agent loop. Preserve
+    # waiting_since so this message doesn't clear the timestamp it left in place.
+    I18n.with_locale(@assistant.account.locale) do
+      create_handoff_message(preserve_waiting_since: true)
+    end
+  end
+
+  def send_out_of_office_message_if_applicable
+    # Campaign conversations should never receive OOO templates — the campaign itself
+    # serves as the initial outreach, and OOO would be confusing in that context.
+    return if @conversation.campaign.present?
+
+    ::MessageTemplates::Template::OutOfOffice.perform_if_applicable(@conversation)
+  end
+
+  def create_handoff_message(preserve_waiting_since: false)
+    @handoff_message = create_outgoing_message(
+      @assistant.config['handoff_message'].presence || I18n.t('conversations.captain.handoff'),
+      preserve_waiting_since: preserve_waiting_since
     )
+  end
+
+  # Capture runs outside the delivery transaction and never raises (the service
+  # swallows its own failures): a session-logging bug must never roll back the
+  # customer reply or trigger the top-level handle_error handoff on top of it.
+  def capture_assistant_session(result_message:, credits_consumed:)
+    Captain::Assistant::SessionCaptureService.new(assistant: @assistant, conversation: @conversation, run_result: @run_result,
+                                                  result_message: result_message, credits_consumed: credits_consumed).capture
   end
 
   def handle_error(error)
     log_error(error)
-    process_action('handoff')
+    @response ||= {}
+    @response['action_source'] ||= 'error'
+    @response['action_reason'] ||= error_action_reason(error)
+    record_v2_response_failure(error_action_reason(error))
+    process_error_handoff
     true
+  end
+
+  def process_error_handoff
+    return unless conversation_pending?
+    return if newer_customer_message_arrived?
+
+    process_failure_handoff
+    record_v2_failure_handoff(source: Captain::ConversationEvents::Sources::GENERATION_FAILURE)
   end
 
   def log_error(error)
     ChatwootExceptionTracker.new(error, account: account).capture_exception
+  end
+
+  def error_action_reason(error)
+    error.class.name.underscore.tr('/', '_')
+  end
+
+  def newer_customer_message_arrived?
+    return false if @responding_to_message_id.blank?
+
+    Conversation.uncached do
+      @conversation.messages
+                   .captain_response_triggering
+                   .exists?(['messages.id > ?', @responding_to_message_id])
+    end
   end
 end

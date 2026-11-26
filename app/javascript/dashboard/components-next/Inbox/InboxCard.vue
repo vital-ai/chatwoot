@@ -3,6 +3,7 @@ import { computed, ref, onBeforeMount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getInboxIconByType } from 'dashboard/helper/inbox';
 import { dynamicTime, shortTimestamp } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
 import {
   snoozedReopenTimeToTimestamp,
   shortenSnoozeTime,
@@ -29,6 +30,8 @@ const emit = defineEmits([
   'deleteNotification',
 ]);
 
+const exactTimestamp = useExactTimestamp();
+
 const { t } = useI18n();
 
 const isContextMenuOpen = ref(false);
@@ -49,8 +52,8 @@ const isUnread = computed(() => !props.inboxItem?.readAt);
 const inbox = computed(() => props.stateInbox);
 
 const inboxIcon = computed(() => {
-  const { phoneNumber, channelType } = inbox.value;
-  return getInboxIconByType(channelType, phoneNumber);
+  const { channelType, medium, voiceEnabled } = inbox.value;
+  return getInboxIconByType(channelType, medium, 'fill', voiceEnabled);
 });
 
 const hasSlaThreshold = computed(() => {
@@ -63,11 +66,12 @@ const lastActivityAt = computed(() => {
 });
 
 const menuItems = computed(() => [
-  { key: 'delete', label: t('INBOX.MENU_ITEM.DELETE') },
   {
     key: isUnread.value ? 'mark_as_read' : 'mark_as_unread',
+    icon: isUnread.value ? 'mail' : 'mail-unread',
     label: t(`INBOX.MENU_ITEM.MARK_AS_${isUnread.value ? 'READ' : 'UNREAD'}`),
   },
+  { key: 'delete', icon: 'delete', label: t('INBOX.MENU_ITEM.DELETE') },
 ]);
 
 const messageClasses = computed(() => ({
@@ -79,27 +83,20 @@ const messageClasses = computed(() => ({
     : getMessageClasses.normal,
 }));
 
-const formatPushMessage = message => {
-  if (message.startsWith(': ')) {
-    return message.slice(2);
+const messageParts = computed(() => {
+  const body = props.inboxItem?.pushMessageBody || '';
+  if (body.startsWith(': ')) {
+    return { senderLabel: '', message: body.slice(2) };
   }
 
-  return message.replace(/^([^:]+):/g, (match, name) => {
-    return `<span class="${messageClasses.value.emphasis}">${name}:</span>`;
-  });
-};
-
-const formattedMessage = computed(() => {
-  const messageContent = `<span class="${messageClasses.value.normal}">${formatPushMessage(props.inboxItem?.pushMessageBody || '')}</span>`;
-
-  return isUnread.value
-    ? `<span class="inline-flex flex-shrink-0 w-2 h-2 mb-px rounded-full bg-n-iris-10 ltr:mr-1 rtl:ml-1"></span> ${messageContent}`
-    : messageContent;
+  const match = body.match(/^[^:]+:/);
+  const senderLabel = match ? match[0] : '';
+  return { senderLabel, message: body.slice(senderLabel.length) };
 });
 
 const notificationDetails = computed(() => {
   const type = props.inboxItem?.notificationType?.toUpperCase() || '';
-  const [icon = '', color = 'text-n-blue-text'] =
+  const [icon = '', color = 'text-n-blue-11'] =
     NOTIFICATION_TYPES_MAPPING[type] || [];
   return { text: type ? t(`INBOX.TYPES_NEXT.${type}`) : '', icon, color };
 });
@@ -153,7 +150,7 @@ onBeforeMount(contextMenuActions.close);
 <template>
   <div
     role="button"
-    class="flex flex-col w-full gap-2 p-3 transition-all duration-300 ease-in-out cursor-pointer"
+    class="flex flex-col w-full gap-1 p-3 transition-all duration-300 ease-in-out cursor-pointer"
     @contextmenu="contextMenuActions.open($event)"
     @click="emit('click')"
   >
@@ -165,7 +162,22 @@ onBeforeMount(contextMenuActions.close);
         rounded-full
         class="mt-1"
       />
-      <p v-dompurify-html="formattedMessage" class="mb-0 line-clamp-2" />
+      <p class="mb-0 line-clamp-2">
+        <template v-if="isUnread">
+          <span
+            class="inline-flex flex-shrink-0 w-2 h-2 mb-px rounded-full bg-n-iris-10 ltr:mr-1 rtl:ml-1"
+          />{{ ' ' }}
+        </template>
+        <span :class="messageClasses.normal">
+          <span
+            v-if="messageParts.senderLabel"
+            :class="messageClasses.emphasis"
+          >
+            {{ messageParts.senderLabel }}
+          </span>
+          <span>{{ messageParts.message }}</span>
+        </span>
+      </p>
     </div>
     <div class="flex items-center justify-between h-6 gap-2">
       <div class="flex items-center flex-1 min-w-0 gap-1">
@@ -180,11 +192,11 @@ onBeforeMount(contextMenuActions.close);
                 : 'i-lucide-alarm-clock-off'
             "
             class="flex-shrink-0 size-4"
-            :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-text'"
+            :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-11'"
           />
           <span
             class="text-xs font-medium truncate"
-            :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-text'"
+            :class="!isUnread ? 'text-n-slate-11' : 'text-n-blue-11'"
           >
             {{ snoozedText }}
           </span>
@@ -232,7 +244,13 @@ onBeforeMount(contextMenuActions.close);
             class="flex-shrink-0 text-n-slate-11 size-2.5"
           />
         </div>
-        <span class="text-sm text-n-slate-10">
+        <span
+          v-tooltip.top="{
+            content: exactTimestamp(inboxItem?.lastActivityAt),
+            delay: { show: 500, hide: 0 },
+          }"
+          class="text-xs text-n-slate-10"
+        >
           {{ lastActivityAt }}
         </span>
       </div>

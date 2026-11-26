@@ -163,8 +163,11 @@ describe Integrations::Slack::SendOnSlackService do
         attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
 
         expect(slack_client).to receive(:files_upload_v2).with(
-          filename: attachment.file.filename,
-          content: anything,
+          files: [{
+            filename: attachment.file.filename.to_s,
+            content: anything,
+            title: attachment.file.filename.to_s
+          }],
           channel_id: hook.reference_id,
           thread_ts: conversation.identifier,
           initial_comment: 'Attached File!'
@@ -176,6 +179,79 @@ describe Integrations::Slack::SendOnSlackService do
 
         expect(message.external_source_id_slack).to eq 'cw-origin-6789.12345'
         expect(message.attachments).to be_any
+      end
+
+      it 'sent multiple attachments on slack' do
+        expect(slack_client).to receive(:chat_postMessage).and_return(slack_message)
+
+        attachment1 = message.attachments.new(account_id: message.account_id, file_type: :image)
+        attachment1.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
+        attachment2 = message.attachments.new(account_id: message.account_id, file_type: :image)
+        attachment2.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'logo.png', content_type: 'image/png')
+
+        expected_files = [
+          { filename: 'avatar.png', content: anything, title: 'avatar.png' },
+          { filename: 'logo.png', content: anything, title: 'logo.png' }
+        ]
+        expect(slack_client).to receive(:files_upload_v2).with(
+          files: expected_files,
+          channel_id: hook.reference_id,
+          thread_ts: conversation.identifier,
+          initial_comment: 'Attached File!'
+        ).and_return(file_attachment)
+
+        message.save!
+        builder.perform
+
+        expect(message.attachments.count).to eq 2
+      end
+
+      it 'streams attachment blobs and uploads only once' do
+        expect(slack_client).to receive(:chat_postMessage).and_return(slack_message)
+
+        attachment = message.attachments.new(account_id: message.account_id, file_type: :image)
+        attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
+        blob = attachment.file.blob
+        allow(blob).to receive(:open).and_call_original
+
+        expect(blob).to receive(:open).and_call_original
+        expect(slack_client).to receive(:files_upload_v2).once.and_return(file_attachment)
+
+        message.save!
+        builder.perform
+      end
+
+      it 'handles file upload errors gracefully' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          channel: hook.reference_id,
+          text: message.content,
+          username: "#{message.sender.name} (Contact)",
+          thread_ts: conversation.identifier,
+          icon_url: anything,
+          unfurl_links: true
+        ).and_return(slack_message)
+
+        attachment = message.attachments.new(account_id: message.account_id, file_type: :image)
+        attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
+
+        expect(slack_client).to receive(:files_upload_v2).with(
+          files: [{
+            filename: attachment.file.filename.to_s,
+            content: anything,
+            title: attachment.file.filename.to_s
+          }],
+          channel_id: hook.reference_id,
+          thread_ts: conversation.identifier,
+          initial_comment: 'Attached File!'
+        ).and_raise(Slack::Web::Api::Errors::SlackError.new('File upload failed'))
+
+        expect(Rails.logger).to receive(:error).with('Failed to upload files: File upload failed')
+
+        message.save!
+
+        builder.perform
+
+        expect(message.external_source_id_slack).to eq 'cw-origin-6789.12345'
       end
 
       it 'will not call file_upload if attachment does not have a file (e.g facebook - fallback type)' do
@@ -281,6 +357,89 @@ describe Integrations::Slack::SendOnSlackService do
         expect(Rails.logger).to receive(:warn).with('Slack: Missing scope error: Missing required scope')
 
         link_builder.link_unfurl(unflur_payload)
+      end
+    end
+
+    context 'when the message is an activity message' do
+      let(:message) do
+        create(:message, account: account, inbox: conversation.inbox, conversation: conversation, message_type: :activity,
+                         content: 'Conversation was resolved')
+      end
+
+      before do
+        message.update!(sender: nil)
+        conversation.update!(identifier: 'random_slack_thread_ts')
+      end
+
+      it 'labels the sender as System and uses the system avatar' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          hash_including(username: 'System', icon_url: a_string_ending_with('sender_type=system_avatar'))
+        ).and_return(slack_message)
+
+        builder.perform
+      end
+    end
+
+    context 'when the message is sent by a contact' do
+      before { conversation.update!(identifier: 'random_slack_thread_ts') }
+
+      it 'uses the contact avatar' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          hash_including(username: "#{message.sender.name} (Contact)", icon_url: a_string_ending_with('sender_type=contact_avatar'))
+        ).and_return(slack_message)
+
+        builder.perform
+      end
+    end
+
+    context 'when the message is sent by an agent' do
+      let(:message) do
+        create(:message, account: account, inbox: conversation.inbox, conversation: conversation, message_type: :outgoing,
+                         sender: create(:user, account: account))
+      end
+
+      before { conversation.update!(identifier: 'random_slack_thread_ts') }
+
+      it 'labels the sender as an agent and uses the agent avatar' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          hash_including(username: "#{message.sender.name} (Agent)", icon_url: a_string_ending_with('sender_type=agent_avatar'))
+        ).and_return(slack_message)
+
+        builder.perform
+      end
+    end
+
+    context 'when the message is sent by an agent who is also a super admin' do
+      let(:message) do
+        create(:message, account: account, inbox: conversation.inbox, conversation: conversation, message_type: :outgoing,
+                         sender: create(:super_admin))
+      end
+
+      before { conversation.update!(identifier: 'random_slack_thread_ts') }
+
+      it 'labels the sender as an agent' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          hash_including(username: "#{message.sender.name} (Agent)", icon_url: a_string_ending_with('sender_type=agent_avatar'))
+        ).and_return(slack_message)
+
+        builder.perform
+      end
+    end
+
+    context 'when the message is sent by a bot' do
+      let(:message) do
+        create(:message, account: account, inbox: conversation.inbox, conversation: conversation, message_type: :outgoing,
+                         sender: create(:agent_bot))
+      end
+
+      before { conversation.update!(identifier: 'random_slack_thread_ts') }
+
+      it 'labels the sender as a bot and uses the bot avatar' do
+        expect(slack_client).to receive(:chat_postMessage).with(
+          hash_including(username: "#{message.sender.name} (Bot)", icon_url: a_string_ending_with('sender_type=bot_avatar'))
+        ).and_return(slack_message)
+
+        builder.perform
       end
     end
 

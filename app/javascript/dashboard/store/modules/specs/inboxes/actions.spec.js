@@ -95,8 +95,9 @@ describe('#actions', () => {
       ]);
     });
     it('sends correct actions if API is error', async () => {
-      axios.post.mockRejectedValue({ message: 'Incorrect header' });
-      await expect(actions.createFBChannel({ commit })).rejects.toThrow(Error);
+      const error = { response: { data: { error: 'Incorrect header' } } };
+      axios.post.mockRejectedValue(error);
+      await expect(actions.createFBChannel({ commit })).rejects.toBe(error);
       expect(commit.mock.calls).toEqual([
         [types.default.SET_INBOXES_UI_FLAG, { isCreating: true }],
         [types.default.SET_INBOXES_UI_FLAG, { isCreating: false }],
@@ -229,6 +230,30 @@ describe('#actions', () => {
       await expect(
         actions.deleteInboxAvatar({}, inboxList[0].id)
       ).rejects.toThrow(Error);
+    });
+  });
+
+  describe('#syncTemplates', () => {
+    it('sends correct API call when sync is successful', async () => {
+      axios.post.mockResolvedValue({
+        data: { message: 'Template sync initiated successfully' },
+      });
+
+      await actions.syncTemplates({ commit }, 123);
+
+      expect(axios.post).toHaveBeenCalledWith(
+        '/api/v1/inboxes/123/sync_templates'
+      );
+    });
+
+    it('throws error when API call fails', async () => {
+      const errorMessage =
+        'Template sync is only available for WhatsApp channels';
+      axios.post.mockRejectedValue(new Error(errorMessage));
+
+      await expect(actions.syncTemplates({ commit }, 123)).rejects.toThrow(
+        errorMessage
+      );
     });
   });
 });

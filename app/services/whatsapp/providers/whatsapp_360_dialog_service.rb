@@ -11,7 +11,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
     end
   end
 
-  def send_template(phone_number, template_info)
+  def send_template(phone_number, template_info, message)
     response = HTTParty.post(
       "#{api_base_path}/messages",
       headers: api_headers,
@@ -22,7 +22,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       }.to_json
     )
 
-    process_response(response)
+    process_response(response, message)
   end
 
   def sync_templates
@@ -37,7 +37,8 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       "#{api_base_path}/configs/webhook",
       headers: { 'D360-API-KEY': whatsapp_channel.provider_config['api_key'], 'Content-Type': 'application/json' },
       body: {
-        url: webhook_url("/webhooks/whatsapp/#{whatsapp_channel.phone_number}")
+        url: webhook_url("/webhooks/whatsapp/#{whatsapp_channel.phone_number}") +
+             "?webhook_token=#{whatsapp_channel.provider_config['webhook_token']}"
       }.to_json
     )
     response.success?
@@ -69,7 +70,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       }.to_json
     )
 
-    process_response(response)
+    process_response(response, message)
   end
 
   def send_attachment_message(phone_number, message)
@@ -91,7 +92,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       }.to_json
     )
 
-    process_response(response)
+    process_response(response, message)
   end
 
   def error_message(response)
@@ -107,10 +108,7 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
         policy: 'deterministic',
         code: template_info[:lang_code]
       },
-      components: [{
-        type: 'body',
-        parameters: template_info[:parameters]
-      }]
+      components: template_info[:parameters]
     }
   end
 
@@ -127,6 +125,6 @@ class Whatsapp::Providers::Whatsapp360DialogService < Whatsapp::Providers::BaseS
       }.to_json
     )
 
-    process_response(response)
+    process_response(response, message)
   end
 end

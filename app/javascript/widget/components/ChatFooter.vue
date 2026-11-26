@@ -6,10 +6,12 @@ import FooterReplyTo from 'widget/components/FooterReplyTo.vue';
 import ChatInputWrap from 'widget/components/ChatInputWrap.vue';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 import { sendEmailTranscript } from 'widget/api/conversation';
-import routerMixin from 'widget/mixins/routerMixin';
+import { useRouter } from 'vue-router';
 import { IFrameHelper } from '../helpers/utils';
 import { CHATWOOT_ON_START_CONVERSATION } from '../constants/sdkEvents';
 import { emitter } from 'shared/helpers/mitt';
+
+const TRANSCRIPT_COOLDOWN_MS = 15000;
 
 export default {
   components: {
@@ -17,10 +19,16 @@ export default {
     CustomButton,
     FooterReplyTo,
   },
-  mixins: [routerMixin],
+  setup() {
+    const router = useRouter();
+    return { router };
+  },
   data() {
     return {
       inReplyTo: null,
+      isSendingTranscript: false,
+      transcriptCooldown: false,
+      transcriptCooldownTimer: null,
     };
   },
   computed: {
@@ -54,16 +62,12 @@ export default {
   mounted() {
     emitter.on(BUS_EVENTS.TOGGLE_REPLY_TO_MESSAGE, this.toggleReplyTo);
   },
+  beforeUnmount() {
+    clearTimeout(this.transcriptCooldownTimer);
+  },
   methods: {
-    ...mapActions('conversation', [
-      'sendMessage',
-      'sendAttachment',
-      'clearConversations',
-    ]),
-    ...mapActions('conversationAttributes', [
-      'getAttributes',
-      'clearConversationAttributes',
-    ]),
+    ...mapActions('conversation', ['sendMessage', 'sendAttachment']),
+    ...mapActions('conversationAttributes', ['getAttributes']),
     async handleSendMessage(content) {
       await this.sendMessage({
         content,
@@ -84,9 +88,7 @@ export default {
       this.inReplyTo = null;
     },
     startNewConversation() {
-      this.clearConversations();
-      this.clearConversationAttributes();
-      this.replaceRoute('prechat-form');
+      this.router.replace({ name: 'prechat-form' });
       IFrameHelper.sendMessage({
         event: 'onEvent',
         eventIdentifier: CHATWOOT_ON_START_CONVERSATION,
@@ -96,19 +98,35 @@ export default {
     toggleReplyTo(message) {
       this.inReplyTo = message;
     },
+    startTranscriptCooldown() {
+      this.transcriptCooldown = true;
+      clearTimeout(this.transcriptCooldownTimer);
+      this.transcriptCooldownTimer = setTimeout(() => {
+        this.transcriptCooldown = false;
+      }, TRANSCRIPT_COOLDOWN_MS);
+    },
     async sendTranscript() {
-      if (this.hasEmail) {
-        try {
-          await sendEmailTranscript();
-          emitter.emit(BUS_EVENTS.SHOW_ALERT, {
-            message: this.$t('EMAIL_TRANSCRIPT.SEND_EMAIL_SUCCESS'),
-            type: 'success',
-          });
-        } catch (error) {
-          emitter.$emit(BUS_EVENTS.SHOW_ALERT, {
-            message: this.$t('EMAIL_TRANSCRIPT.SEND_EMAIL_ERROR'),
-          });
-        }
+      if (
+        !this.hasEmail ||
+        this.isSendingTranscript ||
+        this.transcriptCooldown
+      ) {
+        return;
+      }
+      this.isSendingTranscript = true;
+      try {
+        await sendEmailTranscript();
+        this.startTranscriptCooldown();
+        emitter.emit(BUS_EVENTS.SHOW_ALERT, {
+          message: this.$t('EMAIL_TRANSCRIPT.SEND_EMAIL_SUCCESS'),
+          type: 'success',
+        });
+      } catch (error) {
+        emitter.emit(BUS_EVENTS.SHOW_ALERT, {
+          message: this.$t('EMAIL_TRANSCRIPT.SEND_EMAIL_ERROR'),
+        });
+      } finally {
+        this.isSendingTranscript = false;
       }
     },
   },
@@ -150,6 +168,7 @@ export default {
       v-if="showEmailTranscriptButton"
       type="clear"
       class="font-normal"
+      :disabled="isSendingTranscript || transcriptCooldown"
       @click="sendTranscript"
     >
       {{ $t('EMAIL_TRANSCRIPT.BUTTON_TEXT') }}

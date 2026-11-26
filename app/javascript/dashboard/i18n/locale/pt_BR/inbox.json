@@ -25,7 +25,8 @@
       "PARTICIPATING_CONVERSATION_NEW_MESSAGE": "Nova mensagem em uma conversa na qual você participa",
       "SLA_MISSED_FIRST_RESPONSE": "Primeira resposta da meta de SLA perdida na conversa",
       "SLA_MISSED_NEXT_RESPONSE": "Próxima resposta da meta de SLA perdida na conversa",
-      "SLA_MISSED_RESOLUTION": "A resolução da meta de SLA foi perdida na conversa"
+      "SLA_MISSED_RESOLUTION": "A resolução da meta de SLA foi perdida na conversa",
+      "VOICE_CALL_MISSED": "Chamada perdida"
     },
     "TYPES_NEXT": {
       "CONVERSATION_MENTION": "Mencionado",
@@ -36,6 +37,7 @@
       "SLA_MISSED_RESOLUTION": "Quebra SLA",
       "PARTICIPATING_CONVERSATION_NEW_MESSAGE": "Nova Mensagem",
       "ASSIGNED_CONVERSATION_NEW_MESSAGE": "Nova Mensagem",
+      "VOICE_CALL_MISSED": "Chamada perdida",
       "SNOOZED_UNTIL": "Adiado para {time}",
       "SNOOZED_ENDS": "Adiamento encerrado"
     },
@@ -72,6 +74,24 @@
       "MARK_ALL_READ": "Todas as notificações marcadas como lidas",
       "DELETE_ALL": "Todas as notificações excluídas",
       "DELETE_ALL_READ": "Todas as notificações lidas foram excluídas"
+    },
+    "REAUTHORIZE": {
+      "TITLE": "Reautenticação necessária",
+      "DESCRIPTION": "Sua conexão com o WhatsApp expirou. Por favor, reconecte para continuar recebendo e enviando mensagens.",
+      "BUTTON_TEXT": "Reconectar WhatsApp",
+      "LOADING_FACEBOOK": "Carregando SDK do Facebook...",
+      "SUCCESS": "WhatsApp reconectado com sucesso",
+      "ERROR": "Falha ao reconectar o WhatsApp. Por favor, tente novamente.",
+      "WHATSAPP_APP_ID_MISSING": "WhatsApp App ID não está configurado. Por favor, contate seu administrador.",
+      "WHATSAPP_CONFIG_ID_MISSING": "WhatsApp Configuration ID não está configurado. Por favor, contate seu administrador.",
+      "CONFIGURATION_ERROR": "Ocorreu um erro de configuração ao reautenticar.",
+      "FACEBOOK_LOAD_ERROR": "Falha para carregar o SDK do Facebook. Por favor, tente novamente.",
+      "TROUBLESHOOTING": {
+        "TITLE": "Solucionar problemas",
+        "POPUP_BLOCKED": "Certifique-se de que os pop-ups são permitidos para este site",
+        "COOKIES": "_Cookies_ de terceiros devem estar habilitados",
+        "ADMIN_ACCESS": "Você precisa de acesso de administrador na conta do WhatsApp Business"
+      }
     }
   }
 }

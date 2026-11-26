@@ -1,18 +1,21 @@
 <script>
 import { useVuelidate } from '@vuelidate/core';
-import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { required, minLength, email } from '@vuelidate/validators';
-import globalConfigMixin from 'shared/mixins/globalConfigMixin';
+import { useBranding } from 'shared/composables/useBranding';
 import FormInput from '../../../../components/Form/Input.vue';
 import { resetPassword } from '../../../../api/auth';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 
 export default {
   components: { FormInput, NextButton },
-  mixins: [globalConfigMixin],
+  props: {
+    redirectUrl: { type: String, default: '' },
+    ssoAccountId: { type: String, default: '' },
+  },
   setup() {
-    return { v$: useVuelidate() };
+    const { replaceInstallationName } = useBranding();
+    return { v$: useVuelidate(), replaceInstallationName };
   },
   data() {
     return {
@@ -23,9 +26,6 @@ export default {
       },
       error: '',
     };
-  },
-  computed: {
-    ...mapGetters({ globalConfig: 'globalConfig/get' }),
   },
   validations() {
     return {
@@ -38,6 +38,22 @@ export default {
       },
     };
   },
+  computed: {
+    loginRoute() {
+      const route = { name: 'login' };
+      return this.redirectUrl
+        ? {
+            ...route,
+            query: {
+              redirect_url: this.redirectUrl,
+              ...(this.ssoAccountId
+                ? { sso_account_id: this.ssoAccountId }
+                : {}),
+            },
+          }
+        : route;
+    },
+  },
   methods: {
     showAlertMessage(message) {
       // Reset loading, current selected agent
@@ -46,7 +62,11 @@ export default {
     },
     submit() {
       this.resetPassword.showLoading = true;
-      resetPassword(this.credentials)
+      resetPassword({
+        ...this.credentials,
+        redirectUrl: this.redirectUrl,
+        ssoAccountId: this.ssoAccountId,
+      })
         .then(res => {
           let successMessage = this.$t('RESET_PASSWORD.API.SUCCESS_MESSAGE');
           if (res.data && res.data.message) {
@@ -82,12 +102,7 @@ export default {
       <p
         class="mb-4 text-sm font-normal leading-6 tracking-normal text-n-slate-11"
       >
-        {{
-          useInstallationName(
-            $t('RESET_PASSWORD.DESCRIPTION'),
-            globalConfig.installationName
-          )
-        }}
+        {{ replaceInstallationName($t('RESET_PASSWORD.DESCRIPTION')) }}
       </p>
       <div class="space-y-5">
         <FormInput
@@ -110,7 +125,7 @@ export default {
       </div>
       <p class="mt-4 -mb-1 text-sm text-n-slate-11">
         {{ $t('RESET_PASSWORD.GO_BACK_TO_LOGIN') }}
-        <router-link to="/auth/login" class="text-link text-n-brand">
+        <router-link :to="loginRoute" class="text-link text-n-brand">
           {{ $t('COMMON.CLICK_HERE') }}.
         </router-link>
       </p>

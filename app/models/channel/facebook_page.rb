@@ -21,6 +21,12 @@ class Channel::FacebookPage < ApplicationRecord
   include Channelable
   include Reauthorizable
 
+  # TODO: Remove guard once encryption keys become mandatory (target 3-4 releases out).
+  if Chatwoot.encryption_configured?
+    encrypts :page_access_token
+    encrypts :user_access_token
+  end
+
   self.table_name = 'channel_facebook_pages'
 
   validates :page_id, uniqueness: { scope: :account_id }
@@ -45,7 +51,7 @@ class Channel::FacebookPage < ApplicationRecord
     Facebook::Messenger::Subscriptions.subscribe(
       access_token: page_access_token,
       subscribed_fields: %w[
-        messages message_deliveries message_echoes message_reads standby messaging_handovers
+        messages message_deliveries message_echoes message_reads standby messaging_handovers messaging_postbacks
       ]
     )
   rescue StandardError => e

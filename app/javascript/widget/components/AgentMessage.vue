@@ -6,8 +6,9 @@ import { messageStamp } from 'shared/helpers/timeHelper';
 import ImageBubble from 'widget/components/ImageBubble.vue';
 import VideoBubble from 'widget/components/VideoBubble.vue';
 import FileBubble from 'widget/components/FileBubble.vue';
-import Thumbnail from 'dashboard/components/widgets/Thumbnail.vue';
+import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import { MESSAGE_TYPE } from 'widget/helpers/constants';
+import { isAutoTranslatedReply } from 'widget/helpers/translations';
 import configMixin from '../mixins/configMixin';
 import messageMixin from '../mixins/messageMixin';
 import { isASubmittedFormMessage } from 'shared/helpers/MessageTypeHelper';
@@ -21,7 +22,7 @@ export default {
     AgentMessageBubble,
     ImageBubble,
     VideoBubble,
-    Thumbnail,
+    Avatar,
     UserMessage,
     FileBubble,
     MessageReplyButton,
@@ -72,6 +73,10 @@ export default {
         return this.message.sender.available_name || this.message.sender.name;
       }
 
+      if (this.message.additional_attributes?.sender_name) {
+        return this.message.additional_attributes.sender_name;
+      }
+
       if (this.useInboxAvatarForBot) {
         return this.channelConfig.websiteName;
       }
@@ -87,9 +92,13 @@ export default {
         return displayImage;
       }
 
-      return this.message.sender
-        ? this.message.sender.avatar_url
-        : displayImage;
+      if (this.message.sender) {
+        return this.message.sender.avatar_url;
+      }
+
+      return (
+        this.message.additional_attributes?.sender_avatar_url || displayImage
+      );
     },
     hasRecordedResponse() {
       return (
@@ -131,6 +140,12 @@ export default {
     hasReplyTo() {
       return this.replyTo && (this.replyTo.content || this.replyTo.attachments);
     },
+    isAwaitingTranslation() {
+      return !!this.messageContentAttributes.translation_pending;
+    },
+    isAutoTranslated() {
+      return isAutoTranslatedReply(this.message);
+    },
   },
   watch: {
     message() {
@@ -165,12 +180,15 @@ export default {
   >
     <div v-if="!isASubmittedForm" class="agent-message">
       <div class="avatar-wrap">
-        <Thumbnail
-          v-if="message.showAvatar || hasRecordedResponse"
-          :src="avatarUrl"
-          size="24px"
-          :username="agentName"
-        />
+        <div class="user-thumbnail-box">
+          <Avatar
+            v-if="message.showAvatar || hasRecordedResponse"
+            :src="avatarUrl"
+            :size="24"
+            :name="agentName"
+            rounded-full
+          />
+        </div>
       </div>
       <div class="message-wrap">
         <div v-if="hasReplyTo" class="flex mt-2 mb-1 text-xs">
@@ -192,6 +210,8 @@ export default {
               :message-id="message.id"
               :message-type="messageType"
               :message="message.content"
+              :translating="isAwaitingTranslation"
+              :translated="isAutoTranslated"
             />
             <div
               v-if="hasAttachments"
@@ -237,9 +257,10 @@ export default {
         </div>
         <p
           v-if="message.showAvatar || hasRecordedResponse"
-          v-dompurify-html="agentName"
           class="agent-name text-n-slate-11"
-        />
+        >
+          {{ agentName }}
+        </p>
       </div>
     </div>
 

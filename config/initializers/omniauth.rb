@@ -1,22 +1,20 @@
 require 'securerandom'
 
+# OmniAuth configuration
+# Sets the full host URL for callbacks and proper redirect handling
+OmniAuth.config.full_host = ENV.fetch('FRONTEND_URL', 'http://localhost:3000')
+
 Rails.application.config.middleware.use OmniAuth::Builder do
   provider :google_oauth2, ENV.fetch('GOOGLE_OAUTH_CLIENT_ID', nil), ENV.fetch('GOOGLE_OAUTH_CLIENT_SECRET', nil), {
     provider_ignores_state: true
   }
   
-  # Configuration for Keycloak 17+ (Quarkus) based on user's suggestion
   realm = ENV.fetch('KEYCLOAK_REALM', 'master')
   site_url = ENV.fetch('KEYCLOAK_SERVER_URL', 'http://host.docker.internal:8085')
   callback_url = ENV.fetch('KEYCLOAK_CALLBACK_URL', ENV.fetch('FRONTEND_URL', 'http://localhost:3000') + '/auth/keycloak/callback')
-  
-  # For logging/debugging
-  Rails.logger.info("Configuring Keycloak with:")
-  Rails.logger.info("  Site URL: #{site_url}")
-  Rails.logger.info("  Realm: #{realm}")
-  Rails.logger.info("  Callback URL: #{callback_url}")
-  Rails.logger.info("  Discovery path: #{site_url}/realms/#{realm}/.well-known/openid-configuration")
-  
+
+
+  # Keycloak sign-in for staff (Vital's fork, planning_vital_ai_api/14 §12a)
   provider :keycloak_openid, 
           ENV.fetch('KEYCLOAK_CLIENT_ID', nil),
           ENV.fetch('KEYCLOAK_CLIENT_SECRET', nil),

@@ -26,7 +26,7 @@ module Linear::Queries
           }
         }
         workflowStates(
-          filter: { team: { id: { eq: "#{team_id}" } } }
+          filter: { team: { id: { eq: #{Linear::Mutations.graphql_value(team_id)} } } }
         ) {
           nodes {
             id
@@ -34,7 +34,7 @@ module Linear::Queries
           }
         }
         issueLabels(
-          filter: { team: { id: { eq: "#{team_id}" } } }
+          filter: { team: { id: { eq: #{Linear::Mutations.graphql_value(team_id)} } } }
         ) {
           nodes {
             id
@@ -48,12 +48,13 @@ module Linear::Queries
   def self.search_issue(term)
     <<~GRAPHQL
       query {
-        searchIssues(term: "#{term}") {
+        searchIssues(term: #{Linear::Mutations.graphql_value(term)}) {
           nodes {
             id
             title
             description
             identifier
+            url
             state {
               name
               color

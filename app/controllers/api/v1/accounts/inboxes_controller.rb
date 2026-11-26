@@ -2,12 +2,18 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   include Api::V1::InboxesHelper
   before_action :fetch_inbox, except: [:index, :create]
   before_action :fetch_agent_bot, only: [:set_agent_bot]
-  before_action :validate_limit, only: [:create]
   # we are already handling the authorization in fetch inbox
   before_action :check_authorization, except: [:show]
 
+  include Api::V1::Accounts::Concerns::InboxHealthManagement
+  include Api::V1::Accounts::Concerns::InboxSecretManagement
+  include Api::V1::Accounts::Concerns::BandwidthConfiguration
+  before_action :prepare_bandwidth_configuration, only: [:create, :update]
+
   def index
-    @inboxes = policy_scope(Current.account.inboxes.order_by_name.includes(:channel, { avatar_attachment: [:blob] }))
+    @inboxes = inbox_scope
+               .includes(:channel, :portal, :working_hours, { avatar_attachment: :blob })
+               .order_by_name
   end
 
   def show; end
@@ -42,11 +48,20 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   end
 
   def update
-    inbox_params = permitted_params.except(:channel, :csat_config)
-    inbox_params[:csat_config] = format_csat_config(permitted_params[:csat_config]) if permitted_params[:csat_config].present?
-    @inbox.update!(inbox_params)
-    update_inbox_working_hours
-    update_channel if channel_update_required?
+    continue_update = false
+
+    ActiveRecord::Base.transaction do
+      continue_update = update_branded_email_layout
+      raise ActiveRecord::Rollback unless continue_update
+
+      inbox_params = permitted_params.except(:channel, :csat_config)
+      inbox_params[:csat_config] = format_csat_config(permitted_params[:csat_config]) if permitted_params[:csat_config].present?
+      @inbox.update!(inbox_params)
+      update_channel if channel_update_required?
+      update_inbox_working_hours
+    end
+
+    return unless continue_update
   end
 
   def agent_bot
@@ -71,13 +86,15 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
 
   private
 
+  def inbox_scope = policy_scope(Current.account.inboxes)
+
   def fetch_inbox
     @inbox = Current.account.inboxes.find(params[:id])
     authorize @inbox, :show?
   end
 
   def fetch_agent_bot
-    @agent_bot = AgentBot.find(params[:agent_bot]) if params[:agent_bot]
+    @agent_bot = AgentBot.accessible_to(Current.account).find(params[:agent_bot]) if params[:agent_bot]
   end
 
   def create_channel
@@ -115,8 +132,8 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   end
 
   def reauthorize_and_update_channel(channel_attributes)
-    @inbox.channel.reauthorized! if @inbox.channel.respond_to?(:reauthorized!)
     @inbox.channel.update!(permitted_params(channel_attributes)[:channel])
+    @inbox.channel.reauthorized! if @inbox.channel.respond_to?(:reauthorized!)
   end
 
   def update_channel_feature_flags
@@ -128,31 +145,65 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   end
 
   def format_csat_config(config)
-    {
-      display_type: config['display_type'] || 'emoji',
-      message: config['message'] || '',
-      survey_rules: {
-        operator: config.dig('survey_rules', 'operator') || 'contains',
-        values: config.dig('survey_rules', 'values') || []
-      }
+    formatted = {
+      'display_type' => config['display_type'] || 'emoji',
+      'message' => config['message'] || '',
+      :survey_rules => {
+        'operator' => config.dig('survey_rules', 'operator') || 'contains',
+        'values' => config.dig('survey_rules', 'values') || []
+      },
+      'button_text' => config['button_text'] || 'Please rate us',
+      'language' => config['language'] || 'en'
     }
+    format_template_config(config, formatted)
+    formatted
   end
+
+  def format_template_config(config, formatted)
+    formatted['template'] = config['template'] if config['template'].present?
+  end
+
+  def update_branded_email_layout
+    return true unless params.key?(:branded_email_layout)
+
+    branded_email_layout = normalized_branded_email_layout
+
+    unless Current.account.feature_enabled?(:branded_email_templates)
+      return true if branded_email_layout.blank?
+
+      render_could_not_create_error('Branded email templates feature is not enabled')
+      return false
+    end
+
+    unless @inbox.email?
+      return true if branded_email_layout.blank?
+
+      render_could_not_create_error('Branded email layout is only supported for email inboxes')
+      return false
+    end
+
+    @inbox.update_branded_email_layout!(branded_email_layout)
+    true
+  rescue ActiveRecord::RecordInvalid => e
+    render_could_not_create_error(e.record.errors.full_messages.join(', '))
+    false
+  end
+
+  def normalized_branded_email_layout = params[:branded_email_layout] == 'null' ? nil : params[:branded_email_layout]
 
   def inbox_attributes
     [:name, :avatar, :greeting_enabled, :greeting_message, :enable_email_collect, :csat_survey_enabled,
      :enable_auto_assignment, :working_hours_enabled, :out_of_office_message, :timezone, :allow_messages_after_resolved,
      :lock_to_single_conversation, :portal_id, :sender_name_type, :business_name,
-     { csat_config: [:display_type, :message, { survey_rules: [:operator, { values: [] }] }] }]
+     { csat_config: [:display_type, :message, :button_text, :language,
+                     { survey_rules: [:operator, { values: [] }],
+                       template: [:name, :template_id, :friendly_name, :content_sid, :approval_sid, :created_at, :language, :status] }] }]
   end
 
   def permitted_params(channel_attributes = [])
     # We will remove this line after fixing https://linear.app/chatwoot/issue/CW-1567/null-value-passed-as-null-string-to-backend
     params.each { |k, v| params[k] = params[k] == 'null' ? nil : v }
-
-    params.permit(
-      *inbox_attributes,
-      channel: [:type, *channel_attributes]
-    )
+    params.permit(*inbox_attributes, channel: [:type, *channel_attributes])
   end
 
   def channel_type_from_params
@@ -168,11 +219,7 @@ class Api::V1::Accounts::InboxesController < Api::V1::Accounts::BaseController
   end
 
   def get_channel_attributes(channel_type)
-    if channel_type.constantize.const_defined?(:EDITABLE_ATTRS)
-      channel_type.constantize::EDITABLE_ATTRS.presence
-    else
-      []
-    end
+    channel_type.constantize.const_defined?(:EDITABLE_ATTRS) ? channel_type.constantize::EDITABLE_ATTRS.presence : []
   end
 end
 

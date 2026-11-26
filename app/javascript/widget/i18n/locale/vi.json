@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Không thể gửi, xin thử lại"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Not available"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Chúng tôi đang trực tuyến",
-    "OFFLINE": "Hiện tại chúng tôi đang bận chút"
+    "OFFLINE": "Hiện tại chúng tôi đang bận chút",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Thường trả lời sau vài phút",
     "IN_A_FEW_HOURS": "Thường trả lời sau vài giờ",
     "IN_A_DAY": "Thường trả lời trong một ngày",
-    "BACK_IN": "Chúng tôi sẽ quay lại"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "Chủ Nhật",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Trò chuyện với chúng tôi"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "CC bởi Chatwoot",
   "EMAIL_PLACEHOLDER": "Vui lòng nhập email",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Gõ tin nhắn của bạn",
   "TODAY": "Hôm nay",
   "YESTERDAY": "Hôm qua",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Tìm kiếm biểu tượng cảm xúc",
     "NOT_FOUND": "Không có biểu tượng cảm xúc nào phù hợp với tìm kiếm của bạn",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "No emoji match your search"
   },
   "CSAT": {
     "TITLE": "Đánh giá hội thoại",

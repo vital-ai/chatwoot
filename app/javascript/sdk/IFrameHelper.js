@@ -35,7 +35,6 @@ import {
 } from 'shared/helpers/AudioNotificationHelper';
 import { isFlatWidgetStyle } from './settingsHelper';
 import { popoutChatWindow } from '../widget/helpers/popoutHelper';
-import addHours from 'date-fns/addHours';
 
 const updateAuthCookie = (cookieContent, baseDomain = '') =>
   setCookieWithDomain('cw_conversation', cookieContent, {
@@ -43,7 +42,7 @@ const updateAuthCookie = (cookieContent, baseDomain = '') =>
   });
 
 const updateCampaignReadStatus = baseDomain => {
-  const expireBy = addHours(new Date(), 1);
+  const expireBy = new Date(Date.now() + 60 * 60 * 1000);
   setCookieWithDomain('cw_snooze_campaigns_till', Number(expireBy), {
     expires: expireBy,
     baseDomain,
@@ -166,6 +165,13 @@ export const IFrameHelper = {
         darkMode: window.$chatwoot.darkMode,
         showUnreadMessagesDialog: window.$chatwoot.showUnreadMessagesDialog,
         campaignsSnoozedTill,
+        welcomeTitle: window.$chatwoot.welcomeTitle,
+        welcomeDescription: window.$chatwoot.welcomeDescription,
+        availableMessage: window.$chatwoot.availableMessage,
+        unavailableMessage: window.$chatwoot.unavailableMessage,
+        enableFileUpload: window.$chatwoot.enableFileUpload,
+        enableEmojiPicker: window.$chatwoot.enableEmojiPicker,
+        enableEndConversation: window.$chatwoot.enableEndConversation,
       });
       IFrameHelper.onLoad({
         widgetColor: message.config.channelConfig.widgetColor,

@@ -6,6 +6,7 @@ import {
   buildAttributesFilterTypes,
   CONTACT_ATTRIBUTES,
 } from './helper/filterHelper.js';
+import { groupFilterTypes } from './helper/filterAttributeIcons.js';
 import countries from 'shared/constants/countries.js';
 
 /**
@@ -50,6 +51,7 @@ export function useContactFilterContext() {
   const { t } = useI18n();
 
   const contactAttributes = useMapGetter('attributes/getContactAttributes');
+  const labels = useMapGetter('labels/getLabels');
 
   const {
     equalityOperators,
@@ -135,6 +137,16 @@ export function useContactFilterContext() {
       attributeModel: 'standard',
     },
     {
+      attributeKey: CONTACT_ATTRIBUTES.COMPANY_NAME,
+      value: CONTACT_ATTRIBUTES.COMPANY_NAME,
+      attributeName: t('CONTACTS_LAYOUT.FILTER.COMPANY'),
+      label: t('CONTACTS_LAYOUT.FILTER.COMPANY'),
+      inputType: 'plainText',
+      dataType: 'text',
+      filterOperators: containmentOperators.value,
+      attributeModel: 'standard',
+    },
+    {
       attributeKey: CONTACT_ATTRIBUTES.CREATED_AT,
       value: CONTACT_ATTRIBUTES.CREATED_AT,
       attributeName: t('CONTACTS_LAYOUT.FILTER.CREATED_AT'),
@@ -152,16 +164,6 @@ export function useContactFilterContext() {
       inputType: 'date',
       dataType: 'text',
       filterOperators: dateOperators.value,
-      attributeModel: 'standard',
-    },
-    {
-      attributeKey: CONTACT_ATTRIBUTES.REFERER,
-      value: CONTACT_ATTRIBUTES.REFERER,
-      attributeName: t('CONTACTS_LAYOUT.FILTER.REFERER_LINK'),
-      label: t('CONTACTS_LAYOUT.FILTER.REFERER_LINK'),
-      inputType: 'plainText',
-      dataType: 'text',
-      filterOperators: containmentOperators.value,
       attributeModel: 'standard',
     },
     {
@@ -184,8 +186,27 @@ export function useContactFilterContext() {
       filterOperators: equalityOperators.value,
       attributeModel: 'standard',
     },
+    {
+      attributeKey: CONTACT_ATTRIBUTES.LABELS,
+      value: CONTACT_ATTRIBUTES.LABELS,
+      attributeName: t('CONTACTS_FILTER.ATTRIBUTES.LABELS'),
+      label: t('CONTACTS_FILTER.ATTRIBUTES.LABELS'),
+      inputType: 'multiSelect',
+      options: labels.value?.map(label => ({
+        id: label.title,
+        name: label.title,
+      })),
+      dataType: 'text',
+      filterOperators: equalityOperators.value,
+      attributeModel: 'standard',
+    },
     ...customFilterTypes.value,
   ]);
 
-  return { filterTypes };
+  // The same attributes, grouped into sections with a leading icon, for the attribute picker.
+  const attributeFilterTypes = computed(() =>
+    groupFilterTypes(filterTypes.value, t, 'CONTACTS_FILTER')
+  );
+
+  return { filterTypes, attributeFilterTypes };
 }

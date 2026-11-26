@@ -1,15 +1,31 @@
 <script setup>
 import Banner from 'dashboard/components-next/banner/Banner.vue';
 
+defineProps({
+  actionLabel: {
+    type: String,
+    default: null,
+  },
+  description: {
+    type: String,
+    default: null,
+  },
+  isLoading: {
+    type: Boolean,
+    default: false,
+  },
+});
+
 const emit = defineEmits(['reauthorize']);
 </script>
 
 <template>
   <Banner
     color="ruby"
-    :action-label="$t('INBOX_MGMT.CLICK_TO_RECONNECT')"
+    :action-label="actionLabel || $t('INBOX_MGMT.CLICK_TO_RECONNECT')"
+    :is-loading="isLoading"
     @action="emit('reauthorize')"
   >
-    {{ $t('INBOX_MGMT.RECONNECTION_REQUIRED') }}
+    {{ description || $t('INBOX_MGMT.RECONNECTION_REQUIRED') }}
   </Banner>
 </template>

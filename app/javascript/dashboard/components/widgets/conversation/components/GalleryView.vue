@@ -10,7 +10,7 @@ import { messageTimestamp } from 'shared/helpers/timeHelper';
 import { downloadFile } from '@chatwoot/utils';
 
 import NextButton from 'dashboard/components-next/button/Button.vue';
-import Thumbnail from 'dashboard/components/widgets/Thumbnail.vue';
+import Avatar from 'next/avatar/Avatar.vue';
 import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirection.vue';
 
 const props = defineProps({
@@ -21,6 +21,10 @@ const props = defineProps({
   allAttachments: {
     type: Array,
     required: true,
+  },
+  autoPlay: {
+    type: Boolean,
+    default: false,
   },
 });
 
@@ -186,13 +190,15 @@ onMounted(() => {
             v-if="senderDetails"
             class="flex items-center min-w-[15rem] shrink-0"
           >
-            <Thumbnail
+            <Avatar
               v-if="senderDetails.avatar"
-              :username="senderDetails.name"
+              :name="senderDetails.name"
               :src="senderDetails.avatar"
+              :size="40"
+              rounded-full
               class="flex-shrink-0"
             />
-            <div class="flex flex-col ml-2 rtl:ml-0 rtl:mr-2 overflow-hidden">
+            <div class="flex flex-col ms-2 overflow-hidden">
               <h3 class="text-base leading-5 m-0 font-medium">
                 <span
                   class="overflow-hidden text-n-slate-12 whitespace-nowrap text-ellipsis"
@@ -214,7 +220,7 @@ onMounted(() => {
             <span v-dompurify-html="fileNameFromDataUrl" class="truncate" />
           </div>
 
-          <div class="flex items-center gap-2 ml-2 shrink-0">
+          <div class="flex items-center gap-2 ms-2 shrink-0">
             <NextButton
               v-if="isImage"
               icon="i-lucide-zoom-in"
@@ -307,6 +313,7 @@ onMounted(() => {
               :src="activeAttachment.data_url"
               controls
               playsInline
+              :autoplay="autoPlay"
               class="max-h-full max-w-full object-contain"
               @click.stop
             />
@@ -315,6 +322,7 @@ onMounted(() => {
               v-if="isAudio"
               :key="activeAttachment.message_id"
               controls
+              :autoplay="autoPlay"
               class="w-full max-w-md"
               @click.stop
             >

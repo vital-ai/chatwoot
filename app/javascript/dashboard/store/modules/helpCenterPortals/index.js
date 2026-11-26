@@ -6,6 +6,7 @@ export const defaultPortalFlags = {
   isFetching: false,
   isUpdating: false,
   isDeleting: false,
+  isFetchingSSLStatus: false,
 };
 
 const state = {
@@ -32,6 +33,7 @@ const state = {
     allFetched: false,
     isFetching: false,
     isSwitching: false,
+    isFetchingSSLStatus: false,
   },
 };
 

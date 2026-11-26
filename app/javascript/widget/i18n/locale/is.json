@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Tókst ekki að senda skilaboðin, reyndu aftur"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Not available"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Við erum tengd",
-    "OFFLINE": "Það er enginn við í augnablikinu"
+    "OFFLINE": "Það er enginn við í augnablikinu",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Svarar iðulega innan nokkura mínútna",
     "IN_A_FEW_HOURS": "Svarar iðulega innan nokkura klukkustunda",
     "IN_A_DAY": "Svarar iðulega samdægurs",
-    "BACK_IN": "We will be back online"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "Sunday",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Spjallaðu við okkur"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Keyrt af Chatwoot",
   "EMAIL_PLACEHOLDER": "Vinsamlegast sláðu inn netfangið þitt",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Skrifaðu skilaboðin hér",
   "TODAY": "Í dag",
   "YESTERDAY": "Í gær",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Leita að emoji",
     "NOT_FOUND": "Enginn emoji fannst",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "No emoji match your search"
   },
   "CSAT": {
     "TITLE": "Gefðu samtalinu einkunn",

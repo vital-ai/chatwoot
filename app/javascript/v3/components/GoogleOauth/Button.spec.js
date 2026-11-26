@@ -1,9 +1,9 @@
 import { shallowMount } from '@vue/test-utils';
 import GoogleOAuthButton from './Button.vue';
 
-function getWrapper(showSeparator) {
+function getWrapper(props = {}) {
   return shallowMount(GoogleOAuthButton, {
-    propsData: { showSeparator: showSeparator },
+    props,
     mocks: { $t: text => text },
   });
 }
@@ -20,29 +20,35 @@ describe('GoogleOAuthButton.vue', () => {
     window.chatwootConfig = {};
   });
 
-  it('renders the OR separator if showSeparator is true', () => {
-    const wrapper = getWrapper(true);
-    expect(wrapper.findComponent({ ref: 'divider' }).exists()).toBe(true);
-  });
-
-  it('does not render the OR separator if showSeparator is false', () => {
-    const wrapper = getWrapper(false);
-    expect(wrapper.findComponent({ ref: 'divider' }).exists()).toBe(false);
-  });
-
   it('generates the correct Google Auth URL', () => {
     const wrapper = getWrapper();
     const googleAuthUrl = new URL(wrapper.vm.getGoogleAuthUrl());
     const params = googleAuthUrl.searchParams;
     expect(googleAuthUrl.origin).toBe('https://accounts.google.com');
-    expect(googleAuthUrl.pathname).toBe('/o/oauth2/auth/oauthchooseaccount');
+    expect(googleAuthUrl.pathname).toBe('/o/oauth2/auth');
     expect(params.get('client_id')).toBe('clientId');
     expect(params.get('redirect_uri')).toBe(
       'http://localhost:3000/test-callback'
     );
     expect(params.get('response_type')).toBe('code');
     expect(params.get('scope')).toBe('email profile');
+    expect(params.has('state')).toBe(false);
+  });
 
-    expect(wrapper.findComponent({ ref: 'divider' }).exists()).toBe(true);
+  it('carries the billing redirect through Google OAuth state', () => {
+    const redirectUrl =
+      'settings/billing?plan_handle=growth&shop=store.myshopify.com';
+    const wrapper = getWrapper({ redirectUrl });
+    const googleAuthUrl = new URL(wrapper.vm.getGoogleAuthUrl());
+
+    expect(googleAuthUrl.searchParams.get('state')).toBe(redirectUrl);
+  });
+
+  it('preserves the login redirect in OAuth state', () => {
+    const redirectUrl = `settings/integrations/shopify?shopify_pending_install=${'a'.repeat(32)}`;
+    const wrapper = getWrapper({ redirectUrl });
+    const googleAuthUrl = new URL(wrapper.vm.getGoogleAuthUrl());
+
+    expect(googleAuthUrl.searchParams.get('state')).toBe(redirectUrl);
   });
 });

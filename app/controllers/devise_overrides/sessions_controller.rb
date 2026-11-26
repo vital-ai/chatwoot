@@ -1,9 +1,15 @@
 class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
-  include AuthHelper
-  
+  include MfaAuthenticationHelper
+  include DeviceVerificationGuard
+  include ImpersonationLogging
+
   # Prevent session parameter from being passed
   # Unpermitted parameter: session
   wrap_parameters format: []
+  # DTA's params_for_resource copies these headers into params during super.
+  # Mirror that up front so every pre-authentication check in create sees the
+  # same credentials a header-only request would authenticate with.
+  before_action :merge_credential_headers, only: [:create]
   before_action :process_sso_auth_token, only: [:create]
 
   def new
@@ -11,93 +17,65 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
   end
 
   def create
-    # Authenticate user via the temporary sso auth token
-    Rails.logger.info "SSO Debug: create method called"
-    Rails.logger.info "SSO Debug: sso_auth_token present: #{params[:sso_auth_token].present?}"
-    Rails.logger.info "SSO Debug: @resource present: #{@resource.present?}"
-    Rails.logger.info "SSO Debug: @resource: #{@resource.inspect}"
-    
-    # Comprehensive header debugging for ALB investigation
-    if params[:sso_auth_token].present?
-      Rails.logger.info "SSO Debug: === COMPREHENSIVE HEADER ANALYSIS ==="
-      Rails.logger.info "SSO Debug: request.format = #{request.format}"
-      Rails.logger.info "SSO Debug: request.content_type = #{request.content_type}"
-      Rails.logger.info "SSO Debug: request.xhr? = #{request.xhr?}"
-      Rails.logger.info "SSO Debug: request.headers['Accept'] = #{request.headers['Accept']}"
-      Rails.logger.info "SSO Debug: request.headers['Content-Type'] = #{request.headers['Content-Type']}"
-      Rails.logger.info "SSO Debug: request.headers['X-Requested-With'] = #{request.headers['X-Requested-With']}"
-      Rails.logger.info "SSO Debug: request.headers['User-Agent'] = #{request.headers['User-Agent']}"
-      Rails.logger.info "SSO Debug: request.method = #{request.method}"
-      Rails.logger.info "SSO Debug: request.url = #{request.url}"
-      Rails.logger.info "SSO Debug: All request headers: #{request.headers.to_h.inspect}"
-      Rails.logger.info "SSO Debug: === END HEADER ANALYSIS ==="
-    end
-    
-    if params[:sso_auth_token].present? && @resource.present?
-      Rails.logger.info "SSO Debug: Entering SSO authentication flow"
-      begin
-        authenticate_resource_with_sso_token
-        Rails.logger.info "SSO Debug: SSO authentication completed, calling render_create_success"
-        Rails.logger.info "SSO Debug: @token after authenticate_resource_with_sso_token: #{@token.inspect}"
-        yield @resource if block_given?
-        Rails.logger.info "SSO Debug: About to call render_create_success"
-        render_create_success
-        Rails.logger.info "SSO Debug: render_create_success completed successfully"
-      rescue => e
-        Rails.logger.error "SSO Debug: Exception in SSO flow: #{e.class}: #{e.message}"
-        Rails.logger.error "SSO Debug: Backtrace: #{e.backtrace.first(5).join(', ')}"
-        raise e
-      end
-    else
-      Rails.logger.info "SSO Debug: Falling back to super (standard Devise flow)"
-      super
-    end
+    return handle_mfa_setup_verification if mfa_setup_verification_request?
+    return handle_mfa_verification if mfa_verification_request?
+    return handle_sso_authentication if sso_authentication_request?
+    return if password_pre_auth_intercepted?
+
+    # Only proceed with standard authentication if no MFA is required
+    super
   end
 
   def render_create_success
-    # Set the required DeviseTokenAuth headers
-    send_auth_headers(@resource)
-    
-    # Reload the resource to ensure account associations are properly loaded
-    # This fixes the race condition where active_account_user might be nil
-    if @resource
-      @resource.reload
-      Rails.logger.info "SSO Debug: Resource reloaded, active_account_user present: #{@resource.active_account_user.present?}"
-    end
-    
-    # The send_auth_headers method will handle setting the proper authentication headers
-    # No need to assign the token struct directly to the access_token association
-    
-    # Add comprehensive logging to diagnose request format issues
-    Rails.logger.info "SSO Debug: render_create_success called"
-    Rails.logger.info "SSO Debug: request.format = #{request.format}"
-    Rails.logger.info "SSO Debug: request.content_type = #{request.content_type}"
-    Rails.logger.info "SSO Debug: request.headers['Accept'] = #{request.headers['Accept']}"
-    Rails.logger.info "SSO Debug: request.headers['Content-Type'] = #{request.headers['Content-Type']}"
-    Rails.logger.info "SSO Debug: request.xhr? = #{request.xhr?}"
-    Rails.logger.info "SSO Debug: params = #{params.inspect}"
-    Rails.logger.info "SSO Debug: @resource.access_token present: #{@resource.access_token.present?}"
-    
-    respond_to do |format|
-      format.json { 
-        Rails.logger.info "SSO Debug: Rendering JSON response"
-        begin
-          render partial: 'devise/auth', formats: [:json], locals: { resource: @resource }
-          Rails.logger.info "SSO Debug: JSON response rendered successfully"
-        rescue => e
-          Rails.logger.error "SSO Debug: Error rendering JSON response: #{e.class}: #{e.message}"
-          Rails.logger.error "SSO Debug: Backtrace: #{e.backtrace.first(3).join(', ')}"
-          render json: { error: 'Authentication response error' }, status: :internal_server_error
-        end
-      }
-      format.html { 
-        Rails.logger.info "SSO Debug: Redirecting HTML request to app dashboard"
-        redirect_to ENV.fetch('FRONTEND_URL', '/') + '/app/' 
-      }
+    track_user_session unless @impersonation
+    if @backup_codes.present?
+      render 'devise_overrides/sessions/create_with_backup_codes', formats: [:json]
+    else
+      render partial: 'devise/auth', formats: [:json], locals: { resource: @resource }
     end
   end
 
   private
+
+  def render_create_error_not_confirmed
+    render_error(
+      :unauthorized,
+      I18n.t('devise_token_auth.sessions.not_confirmed', email: @resource.email),
+      error_code: 'user_not_confirmed'
+    )
+  end
+
+  def merge_credential_headers
+    params[:email] ||= request.headers['email'] unless request.headers['email'].nil?
+    params[:password] ||= request.headers['password'] unless request.headers['password'].nil?
+  end
+
+  def find_user_for_authentication
+    return nil unless params[:email].present? && params[:password].present?
+
+    normalized_email = params[:email].strip.downcase
+    user = User.from_email(normalized_email)
+    return nil unless user&.valid_password?(params[:password])
+    return nil unless user.active_for_authentication?
+
+    user
+  end
+
+  def sso_authentication_request?
+    params[:sso_auth_token].present? && @resource.present?
+  end
+
+  def handle_sso_authentication
+    return if !@impersonation && enforce_session_limit_for_password_login(@resource)
+    return render_create_error_bad_credentials if @impersonation && !@resource.consume_sso_auth_token(params[:sso_auth_token])
+
+    authenticate_resource_with_sso_token
+    log_impersonation_started if @impersonation
+    yield @resource if block_given?
+    # Vital's fork: reload so the account associations made at SSO sign-in are present in the response
+    @resource.reload
+    render_create_success
+  end
 
   def login_page_url(error: nil)
     frontend_url = ENV.fetch('FRONTEND_URL', nil)
@@ -106,54 +84,132 @@ class DeviseOverrides::SessionsController < DeviseTokenAuth::SessionsController
   end
 
   def authenticate_resource_with_sso_token
-    Rails.logger.info "SSO Debug: authenticate_resource_with_sso_token called"
-    Rails.logger.info "SSO Debug: Creating token for user #{@resource.id}"
-    
-    @token = @resource.create_token
-    Rails.logger.info "SSO Debug: Token created: #{@token.inspect}"
-    
+    # DTA evicts the earliest-expiring token after save when at max_number_of_devices.
+    # The short-lived impersonation token would always be that one, so pre-evict to make room.
+    make_room_for_impersonation_token if @impersonation
+    token_extras = @impersonation ? { impersonation: true, impersonated_by: @impersonator_id }.compact : {}
+    @token = @resource.create_token(lifespan: @impersonation ? 2.days.to_i : nil, **token_extras)
     @resource.save!
-    Rails.logger.info "SSO Debug: Resource saved successfully"
 
-    Rails.logger.info "SSO Debug: About to sign in user - resource valid: #{@resource.valid?}"
-    Rails.logger.info "SSO Debug: Resource errors: #{@resource.errors.full_messages}" if @resource.errors.any?
-    Rails.logger.info "SSO Debug: Current user before sign_in: #{current_user.inspect}"
-    
-    begin
-      Rails.logger.info "SSO Debug: Calling sign_in with scope: :user, resource: #{@resource.class}##{@resource.id}"
-      sign_in(:user, @resource, store: false, bypass: false)
-      Rails.logger.info "SSO Debug: sign_in call completed"
-      Rails.logger.info "SSO Debug: Current user after sign_in: #{current_user.inspect}"
-      Rails.logger.info "SSO Debug: User authenticated?: #{user_signed_in?}"
-    rescue => e
-      Rails.logger.error "SSO Debug: Exception during sign_in: #{e.class}: #{e.message}"
-      Rails.logger.error "SSO Debug: sign_in backtrace: #{e.backtrace.first(5).join(', ')}"
-      raise e
-    end
-    
+    sign_in(:user, @resource, store: false, bypass: false)
     # invalidate the token after the user is signed in
-    Rails.logger.info "SSO Debug: About to invalidate SSO token"
     @resource.invalidate_sso_auth_token(params[:sso_auth_token])
-    Rails.logger.info "SSO Debug: SSO token invalidated"
+  end
+
+  def make_room_for_impersonation_token
+    return if @resource.tokens.size < DeviseTokenAuth.max_number_of_devices
+
+    oldest_client_id = @resource.tokens.min_by { |_, v| v['expiry'].to_i }&.first
+    @resource.tokens.delete(oldest_client_id) if oldest_client_id
   end
 
   def process_sso_auth_token
     return if params[:email].blank?
 
-    # URL decode the email parameter to handle double-encoded emails from OAuth redirects
-    decoded_email = CGI.unescape(params[:email])
-    Rails.logger.info "SSO Debug: Original email param: #{params[:email]}, Decoded: #{decoded_email}"
-    
-    user = User.from_email(decoded_email)
-    Rails.logger.info "SSO Debug: User found: #{user.present?}, User ID: #{user&.id}"
-    
-    if user && params[:sso_auth_token].present?
-      token_valid = user.valid_sso_auth_token?(params[:sso_auth_token])
-      Rails.logger.info "SSO Debug: Token valid: #{token_valid}, Token: #{params[:sso_auth_token][0..8]}..."
-      @resource = user if token_valid
-    else
-      Rails.logger.info "SSO Debug: Missing user or token. User: #{user.present?}, Token: #{params[:sso_auth_token].present?}"
+    user = User.from_email(params[:email])
+    return unless user&.valid_sso_auth_token?(params[:sso_auth_token])
+
+    @resource = user
+    @impersonator_id = user.sso_auth_token_impersonator_id(params[:sso_auth_token])
+    @impersonation = user.sso_auth_token_impersonation?(params[:sso_auth_token])
+  end
+
+  def sessions_limit_reached?(user)
+    limit = ENV.fetch('MAX_USER_SESSIONS', 25).to_i
+    active_token_count(user) >= limit
+  end
+
+  def active_token_count(user)
+    now = Time.current.to_i
+    (user.tokens || {}).count { |_, v| v['expiry'].to_i > now }
+  end
+
+  # Returns true when a response has been rendered (e.g., 409 picker). Non-browser clients
+  # auto-evict instead of getting stuck on a UI they can't render.
+  def enforce_session_limit_for_password_login(user)
+    if revoking_sessions?
+      revoke_sessions_for_login(user)
+      return false
     end
+
+    return false unless sessions_limit_reached?(user)
+
+    # Picker only when every token has a tracked session; partial tracking would
+    # show a misleading count, so fall through to silent eviction instead.
+    if browser_request? && user.user_sessions.count >= user.tokens.size
+      handle_sessions_limit_for_login(user)
+      true
+    else
+      evict_oldest_session(user)
+      false
+    end
+  end
+
+  def browser_request?
+    request.user_agent.to_s.include?('Mozilla')
+  end
+
+  def revoking_sessions?
+    params[:revoke_session_id].present? || params[:revoke_all_sessions].present?
+  end
+
+  def revoke_sessions_for_login(user)
+    if params[:revoke_all_sessions].present?
+      user.tokens = {}
+      user.save!
+      user.user_sessions.destroy_all
+    elsif params[:revoke_session_id].present?
+      session = user.user_sessions.find_by(id: params[:revoke_session_id])
+      return unless session
+
+      user.tokens.delete(session.client_id)
+      user.save!
+      session.destroy!
+    end
+  end
+
+  def evict_oldest_session(user)
+    # Drop pre-rollout untracked tokens first so freshly tracked logins aren't evicted.
+    return evict_oldest_token(user) if user.user_sessions.count < user.tokens.size
+
+    oldest_session = user.user_sessions.order(Arel.sql('COALESCE(last_activity_at, created_at) ASC')).first
+    return evict_oldest_token(user) unless oldest_session
+
+    user.tokens.delete(oldest_session.client_id)
+    user.save!
+    oldest_session.destroy!
+  end
+
+  # Fallback if a token exists without a UserSession row (e.g., legacy data before tracking shipped).
+  def evict_oldest_token(user)
+    return if user.tokens.blank?
+
+    oldest_client_id = user.tokens.min_by { |_, v| v['expiry'].to_i }&.first
+    return unless oldest_client_id
+
+    user.tokens.delete(oldest_client_id)
+    user.save!
+  end
+
+  PICKER_SESSION_FIELDS = %i[id browser_name browser_version device_name platform_name platform_version
+                             ip_address city country last_activity_at created_at].freeze
+
+  def handle_sessions_limit_for_login(user)
+    sessions = user.user_sessions.order(last_activity_at: :desc).map { |s| s.slice(*PICKER_SESSION_FIELDS) }
+    render json: { sessions_limit_reached: true, sessions: sessions }, status: :conflict
+  end
+
+  def track_user_session
+    client_id = @token&.try(:client) || response.headers['client']
+    return unless client_id.present? && @resource.present?
+
+    UserSessionTrackingService.new(
+      user: @resource,
+      request: request,
+      client_id: client_id
+    ).create_or_update!
+  rescue StandardError => e
+    Rails.logger.warn "Session tracking failed: #{e.message}"
   end
 end
 

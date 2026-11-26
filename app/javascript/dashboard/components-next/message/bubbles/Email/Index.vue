@@ -1,12 +1,13 @@
 <script setup>
 import { computed, useTemplateRef, ref, onMounted } from 'vue';
 import { Letter } from 'vue-letter';
+import { sanitizeTextForRender } from '@chatwoot/utils';
 import { allowedCssProperties } from 'lettersanitizer';
 
 import Icon from 'next/icon/Icon.vue';
-import { EmailQuoteExtractor } from './removeReply.js';
-import BaseBubble from 'next/message/bubbles/Base.vue';
+import { EmailQuoteExtractor } from 'dashboard/helper/emailQuoteExtractor.js';
 import FormattedContent from 'next/message/bubbles/Text/FormattedContent.vue';
+import BaseBubble from 'next/message/bubbles/Base.vue';
 import AttachmentChips from 'next/message/chips/AttachmentChips.vue';
 import EmailMeta from './EmailMeta.vue';
 import TranslationToggle from 'dashboard/components-next/message/TranslationToggle.vue';
@@ -15,13 +16,19 @@ import { useMessageContext } from '../../provider.js';
 import { MESSAGE_TYPES } from 'next/message/constants.js';
 import { useTranslations } from 'dashboard/composables/useTranslations';
 
-const { content, contentAttributes, attachments, messageType } =
-  useMessageContext();
+const {
+  content,
+  contentAttributes,
+  attachments,
+  messageType,
+  contactSide,
+  showingOriginal,
+  isCaptainMessage,
+} = useMessageContext();
 
 const isExpandable = ref(false);
 const isExpanded = ref(false);
 const showQuotedMessage = ref(false);
-const renderOriginal = ref(false);
 const contentContainer = useTemplateRef('contentContainer');
 
 onMounted(() => {
@@ -31,66 +38,69 @@ onMounted(() => {
 const isOutgoing = computed(() => messageType.value === MESSAGE_TYPES.OUTGOING);
 const isIncoming = computed(() => !isOutgoing.value);
 
-const { hasTranslations, translationContent } =
-  useTranslations(contentAttributes);
+const { hasTranslations, translationContent } = useTranslations(
+  contentAttributes,
+  contactSide
+);
+const showsTranslation = computed(
+  () => hasTranslations.value && !showingOriginal.value
+);
 
 const originalEmailText = computed(() => {
   const text =
     contentAttributes?.value?.email?.textContent?.full ?? content.value;
-  return text?.replace(/\n/g, '<br>');
+  return sanitizeTextForRender(text);
 });
 
 const originalEmailHtml = computed(
   () =>
-    contentAttributes?.value?.email?.htmlContent?.full ??
+    contentAttributes?.value?.email?.htmlContent?.full ||
     originalEmailText.value
 );
 
-const messageContent = computed(() => {
-  // If translations exist and we're showing translations (not original)
-  if (hasTranslations.value && !renderOriginal.value) {
-    return translationContent.value;
-  }
-  // Otherwise show original content
-  return content.value;
+const hasEmailContent = computed(() => {
+  return (
+    contentAttributes?.value?.email?.textContent?.full ||
+    contentAttributes?.value?.email?.htmlContent?.full
+  );
 });
 
-const textToShow = computed(() => {
-  // If translations exist and we're showing translations (not original)
-  if (hasTranslations.value && !renderOriginal.value) {
-    return translationContent.value;
-  }
-  // Otherwise show original text
-  return originalEmailText.value;
-});
-
-const fullHTML = computed(() => {
-  // If translations exist and we're showing translations (not original)
-  if (hasTranslations.value && !renderOriginal.value) {
-    return translationContent.value;
-  }
-  // Otherwise show original HTML
-  return originalEmailHtml.value;
-});
-
-const unquotedHTML = computed(() =>
-  EmailQuoteExtractor.extractQuotes(fullHTML.value)
+const messageContent = computed(() =>
+  showsTranslation.value ? translationContent.value : content.value
 );
 
-const hasQuotedMessage = computed(() =>
-  EmailQuoteExtractor.hasQuotes(fullHTML.value)
+const textToShow = computed(() =>
+  showsTranslation.value ? translationContent.value : originalEmailText.value
+);
+
+const fullHTML = computed(() =>
+  showsTranslation.value ? translationContent.value : originalEmailHtml.value
+);
+
+const isForwarded = computed(
+  () => !!contentAttributes.value?.forwardedMessageId
+);
+
+const unquotedHTML = computed(() =>
+  isForwarded.value
+    ? fullHTML.value
+    : EmailQuoteExtractor.extractQuotes(fullHTML.value)
+);
+
+const hasQuotedMessage = computed(
+  () => !isForwarded.value && EmailQuoteExtractor.hasQuotes(fullHTML.value)
 );
 
 // Ensure unique keys for <Letter> when toggling between original and translated views.
 // This forces Vue to re-render the component and update content correctly.
 const translationKeySuffix = computed(() => {
-  if (renderOriginal.value) return 'original';
+  if (showingOriginal.value) return 'original';
   if (hasTranslations.value) return 'translated';
   return 'original';
 });
 
 const handleSeeOriginal = () => {
-  renderOriginal.value = !renderOriginal.value;
+  showingOriginal.value = !showingOriginal.value;
 };
 </script>
 
@@ -119,7 +129,13 @@ const handleSeeOriginal = () => {
       >
         <div
           v-if="isExpandable && !isExpanded"
-          class="absolute left-0 right-0 bottom-0 h-40 px-8 flex items-end bg-gradient-to-t from-n-slate-4 via-n-slate-4 via-20% to-transparent"
+          class="absolute left-0 right-0 bottom-0 h-40 px-8 flex items-end"
+          :class="{
+            'bg-gradient-to-t from-n-slate-4 via-n-slate-4 via-20% to-transparent':
+              isIncoming,
+            'bg-gradient-to-t from-n-solid-blue via-n-solid-blue via-20% to-transparent':
+              isOutgoing,
+          }"
         >
           <button
             class="text-n-slate-12 py-2 px-8 mx-auto text-center flex items-center gap-2"
@@ -130,7 +146,7 @@ const handleSeeOriginal = () => {
           </button>
         </div>
         <FormattedContent
-          v-if="isOutgoing && content"
+          v-if="isOutgoing && content && !hasEmailContent"
           class="text-n-slate-12"
           :content="messageContent"
         />
@@ -182,9 +198,9 @@ const handleSeeOriginal = () => {
       </div>
     </section>
     <TranslationToggle
-      v-if="hasTranslations"
+      v-if="!isCaptainMessage"
       class="py-2 px-3"
-      :showing-original="renderOriginal"
+      :showing-original="showingOriginal"
       @toggle="handleSeeOriginal"
     />
     <section
@@ -211,5 +227,11 @@ const handleSeeOriginal = () => {
       display: inline-block;
     }
   }
+}
+
+// Email clients (Gmail, Outlook) hardcode dir="ltr" on wrapper elements.
+// In RTL apps this forces email content LTR regardless of actual text.
+[dir='rtl'] .letter-render [dir='ltr'] {
+  direction: inherit;
 }
 </style>

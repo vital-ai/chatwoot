@@ -1,10 +1,22 @@
 class AdministratorNotifications::AccountNotificationMailer < AdministratorNotifications::BaseMailer
-  def account_deletion(account, reason = 'manual_deletion')
-    subject = 'Your account has been marked for deletion'
+  def account_deletion_user_initiated(account, reason)
+    subject = 'Your Chatwoot account deletion has been scheduled'
     action_url = settings_url('general')
     meta = {
       'account_name' => account.name,
-      'deletion_date' => account.custom_attributes['marked_for_deletion_at'],
+      'deletion_date' => format_deletion_date(account.custom_attributes['marked_for_deletion_at']),
+      'reason' => reason
+    }
+
+    send_notification(subject, action_url: action_url, meta: meta)
+  end
+
+  def account_deletion_for_inactivity(account, reason)
+    subject = 'Your Chatwoot account is scheduled for deletion due to inactivity'
+    action_url = settings_url('general')
+    meta = {
+      'account_name' => account.name,
+      'deletion_date' => format_deletion_date(account.custom_attributes['marked_for_deletion_at']),
       'reason' => reason
     }
 
@@ -14,7 +26,9 @@ class AdministratorNotifications::AccountNotificationMailer < AdministratorNotif
   def contact_import_complete(resource)
     subject = 'Contact Import Completed'
 
-    action_url = if resource.failed_records.attached?
+    action_url = if resource.csv_import?
+                   settings_url("data/#{resource.id}")
+                 elsif resource.failed_records.attached?
                    Rails.application.routes.url_helpers.rails_blob_url(resource.failed_records)
                  else
                    "#{ENV.fetch('FRONTEND_URL', nil)}/app/accounts/#{resource.account.id}/contacts"
@@ -44,5 +58,15 @@ class AdministratorNotifications::AccountNotificationMailer < AdministratorNotif
     meta = { 'rule_name' => rule.name }
 
     send_notification(subject, action_url: action_url, meta: meta)
+  end
+
+  private
+
+  def format_deletion_date(deletion_date_str)
+    return 'Unknown' if deletion_date_str.blank?
+
+    Time.zone.parse(deletion_date_str).strftime('%B %d, %Y')
+  rescue StandardError
+    'Unknown'
   end
 end

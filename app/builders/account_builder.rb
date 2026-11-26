@@ -10,7 +10,7 @@ class AccountBuilder
       validate_user
     end
     ActiveRecord::Base.transaction do
-      @account = find_or_create_account
+      @account = create_account
       @user = create_and_link_user
     end
     [@user, @account]
@@ -43,8 +43,12 @@ class AccountBuilder
     end
   end
 
-  def find_or_create_account
-    @account = Account.find_by(name: account_name) || Account.create!(name: account_name, locale: I18n.locale)
+  def create_account
+    @account = Account.create!(
+      name: account_name,
+      locale: I18n.locale,
+      custom_attributes: { 'onboarding_step' => 'account_details' }
+    )
     Current.account = @account
   end
 
@@ -66,12 +70,17 @@ class AccountBuilder
   end
 
   def create_user
+    @user = build_user
+    @user.save!
+  end
+
+  def build_user
     @user = User.new(email: @email,
-                     password: @user_password,
-                     password_confirmation: @user_password,
+                     password: user_password,
+                     password_confirmation: user_password,
                      name: user_full_name)
     @user.type = 'SuperAdmin' if @super_admin
     @user.confirm if @confirmed
-    @user.save!
+    @user
   end
 end

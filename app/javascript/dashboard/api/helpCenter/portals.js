@@ -18,8 +18,24 @@ class PortalsAPI extends ApiClient {
     return axios.delete(`${this.url}/${portalSlug}`);
   }
 
-  deleteLogo(portalSlug) {
-    return axios.delete(`${this.url}/${portalSlug}/logo`);
+  deleteLogo(portalSlug, isDarkLogo = false) {
+    return axios.delete(`${this.url}/${portalSlug}/logo`, {
+      params: { dark: isDarkLogo },
+    });
+  }
+
+  removeLocale(portalSlug, locale) {
+    return axios.delete(`${this.url}/${portalSlug}/remove_locale`, {
+      params: { locale },
+    });
+  }
+
+  sendCnameInstructions(portalSlug, email) {
+    return axios.post(`${this.url}/${portalSlug}/send_instructions`, { email });
+  }
+
+  sslStatus(portalSlug) {
+    return axios.get(`${this.url}/${portalSlug}/ssl_status`);
   }
 }
 

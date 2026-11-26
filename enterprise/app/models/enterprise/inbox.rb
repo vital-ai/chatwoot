@@ -1,6 +1,7 @@
 module Enterprise::Inbox
   def member_ids_with_assignment_capacity
     return super unless enable_auto_assignment?
+    return filter_by_capacity(available_agents).map(&:user_id) if auto_assignment_v2_enabled?
 
     max_assignment_limit = auto_assignment_config['max_assignment_limit']
     overloaded_agent_ids = max_assignment_limit.present? ? get_agent_ids_over_assignment_limit(max_assignment_limit) : []
@@ -12,7 +13,11 @@ module Enterprise::Inbox
   end
 
   def captain_active?
-    captain_assistant.present? && more_responses?
+    account.feature_enabled?('captain_integration') && captain_assistant.present? && more_responses?
+  end
+
+  def conflicting_bot_provider(provider)
+    super || ('Captain' if provider != :captain && CaptainInbox.joins(:captain_assistant).exists?(inbox_id: id))
   end
 
   private
@@ -22,7 +27,13 @@ module Enterprise::Inbox
   end
 
   def get_agent_ids_over_assignment_limit(limit)
-    conversations.open.select(:assignee_id).group(:assignee_id).having("count(*) >= #{limit.to_i}").filter_map(&:assignee_id)
+    conversations
+      .open
+      .where(account_id: account_id)
+      .select(:assignee_id)
+      .group(:assignee_id)
+      .having("count(*) >= #{limit.to_i}")
+      .filter_map(&:assignee_id)
   end
 
   def ensure_valid_max_assignment_limit

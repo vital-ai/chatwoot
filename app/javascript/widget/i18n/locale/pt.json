@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Não foi possível enviar, tente novamente"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Not available"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Estamos online",
-    "OFFLINE": "Estamos ausentes"
+    "OFFLINE": "Estamos ausentes",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Normalmente respondemos em poucos minutos",
     "IN_A_FEW_HOURS": "Normalmente respondemos em poucas horas",
     "IN_A_DAY": "Normalmente respondemos num dia",
-    "BACK_IN": "Voltaremos online"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "Domingo",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Fale connosco"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Desenvolvido por Chatwoot",
   "EMAIL_PLACEHOLDER": "Por favor, digite seu e-mail",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Escreva a sua mensagem",
   "TODAY": "Hoje",
   "YESTERDAY": "Ontem",
@@ -74,7 +88,7 @@
         "DROPDOWN_SEARCH": "Search country"
       },
       "MESSAGE": {
-        "LABEL": "Messagem",
+        "LABEL": "Mensagem",
         "PLACEHOLDER": "Por favor, escreva a sua mensagem",
         "ERROR": "Mensagem muito pequena"
       }
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Pesquisar emojis",
     "NOT_FOUND": "Nenhum emoji corresponde à sua pesquisa",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "Nenhum emoji corresponde à sua pesquisa"
   },
   "CSAT": {
     "TITLE": "Avalie a sua conversa",

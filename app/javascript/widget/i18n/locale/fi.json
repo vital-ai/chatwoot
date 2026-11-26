@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Ei voitu lähettää, yritä uudestaan"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Not available"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Olemme online-tilassa",
-    "OFFLINE": "Olemme tällä hetkellä poissa"
+    "OFFLINE": "Olemme tällä hetkellä poissa",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "Vastaa tyypillisesti muutamassa minuutissa",
     "IN_A_FEW_HOURS": "Tyypillisesti vastaa muutaman tunnin kuluessa",
     "IN_A_DAY": "Vastaa tyypillisesti päivässä",
-    "BACK_IN": "Tulemme olemaan takaisin linjoilla"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "Sunnuntai",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Keskustele kanssamme"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Palvelun tarjoaa Chatwoot",
   "EMAIL_PLACEHOLDER": "Ole hyvä ja syötä sähköpostiosoitteesi",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Kirjoita viestisi",
   "TODAY": "Tänään",
   "YESTERDAY": "Eilen",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Etsi emojeista",
     "NOT_FOUND": "Yksikään emoji ei vastaa hakuasi",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "No emoji match your search"
   },
   "CSAT": {
     "TITLE": "Anna arvio palvelusta",

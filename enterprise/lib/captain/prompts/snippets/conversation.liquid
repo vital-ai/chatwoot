@@ -1,0 +1,22 @@
+# Current Conversation Context
+- Conversation ID: {{ conversation.display_id }}
+- Contact ID: {{ conversation.contact_id }}
+- Status: {{ conversation.status }}
+- Priority: {{ conversation.priority || "None" }}
+{% if conversation.label_list.size > 0 -%}
+- Labels: {{ conversation.label_list | join: ", " }}
+{% endif -%}
+{% if conversation.custom_attributes -%}
+{% for attribute in conversation.custom_attributes -%}
+- {{ attribute[0] }}: {{ attribute[1] }}
+{% endfor -%}
+{% endif -%}
+{% comment %}Leave out language hints: the model replies in them even when the customer writes in another language.{% endcomment -%}
+{% assign language_hints = 'browser_language,widget_language,initiated_at' | split: ',' -%}
+{% if conversation.additional_attributes -%}
+{% for attribute in conversation.additional_attributes -%}
+{% unless language_hints contains attribute[0] -%}
+- {{ attribute[0] }}: {{ attribute[1] }}
+{% endunless -%}
+{% endfor -%}
+{% endif -%}

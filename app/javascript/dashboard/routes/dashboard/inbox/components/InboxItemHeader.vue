@@ -11,6 +11,7 @@ import CustomSnoozeModal from 'dashboard/components/CustomSnoozeModal.vue';
 import { emitter } from 'shared/helpers/mitt';
 import BackButton from 'dashboard/components/widgets/BackButton.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
+import { openCommandBar } from 'dashboard/modules/command-bar/openCommandBar';
 
 export default {
   components: {
@@ -48,8 +49,7 @@ export default {
   },
   methods: {
     openSnoozeNotificationModal() {
-      const ninja = document.querySelector('ninja-keys');
-      ninja.open({ parent: 'snooze_notification' });
+      openCommandBar({ page: 'snooze_notification' });
     },
     hideCustomSnoozeModal() {
       this.showCustomSnoozeModal = false;
@@ -69,6 +69,8 @@ export default {
     onCmdSnoozeNotification(snoozeType) {
       if (snoozeType === wootConstants.SNOOZE_OPTIONS.UNTIL_CUSTOM_TIME) {
         this.showCustomSnoozeModal = true;
+      } else if (typeof snoozeType === 'number') {
+        this.snoozeNotification(snoozeType);
       } else {
         const snoozedUntil = findSnoozeTime(snoozeType) || null;
         this.snoozeNotification(snoozedUntil);
@@ -109,7 +111,7 @@ export default {
 
 <template>
   <div
-    class="flex items-center justify-between w-full gap-2 border-b ltr:pl-4 rtl:pl-2 h-12 ltr:pr-2 rtl:pr-4 rtl:border-r border-n-weak"
+    class="flex items-center justify-between w-full gap-2 border-b px-3 h-12 rtl:border-r border-n-weak flex-shrink-0 bg-n-surface-1"
   >
     <div class="flex items-center gap-4">
       <BackButton

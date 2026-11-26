@@ -1,139 +1,176 @@
 class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCallbacksController
   include EmailHelper
-  
-  # Add a specific method for keycloak callbacks
+
+  SHOPIFY_INSTALL_REDIRECT_PATTERN = %r{\Asettings/integrations/shopify\?shopify_pending_install=([0-9a-f]{32})\z}
+
+  # Vital's fork: staff sign in with Keycloak (planning_vital_ai_api/14 §12a, 15 §3c). OmniAuth's keycloak strategy
+  # hands its callback here; without an auth hash (a failed code exchange) it goes back to the login page.
   def keycloak
-    Rails.logger.info("Keycloak callback received with params: #{request.params.inspect}")
-    Rails.logger.info("Request env contents: #{request.env.keys.sort.inspect}")
-    Rails.logger.info("OmniAuth strategy: #{request.env['omniauth.strategy'].inspect if request.env['omniauth.strategy']}")
-    Rails.logger.info("Request env omniauth auth: #{request.env['omniauth.auth'].inspect}")
-    Rails.logger.info("Request env omniauth error: #{request.env['omniauth.error'].inspect if request.env['omniauth.error']}")
-    
-    # If OmniAuth didn't process auth_hash correctly, we might need to handle it ourselves
-    if request.env['omniauth.auth'].nil? && request.params['code'].present?
-      Rails.logger.info("Attempting to handle Keycloak auth directly")
-      
-      # Check if we have an omniauth error
-      if request.env['omniauth.error']
-        Rails.logger.error("OmniAuth error: #{request.env['omniauth.error'].message}")
-        Rails.logger.error("OmniAuth error type: #{request.env['omniauth.error'].class}")
-      end
-      
-      # For now, let's try to redirect to the login page with an error message
-      # In the future, we could implement direct token exchange with Keycloak
-      return redirect_to login_page_url(error: 'keycloak-auth-error')
-    end
-    
-    handle_omniauth_callback
+    return redirect_to login_page_url(error: 'keycloak-auth-error'), allow_other_host: true if auth_hash.blank?
+
+    omniauth_success
   end
-  
-  # Keep the original method for other providers (like Google)
+
   def omniauth_success
-    handle_omniauth_callback
-  end
-  
-  def handle_omniauth_callback
     get_resource_from_auth_hash
-    @resource.present? ? sign_in_user : sign_up_user
+
+    @resource.present? ? sign_in_user(redirect_url: oauth_redirect_url, sso_account_id: oauth_context['sso_account_id']) : sign_up_user
   end
 
   private
 
-  def sign_in_user
+  def sign_in_user(redirect_url: nil, sso_account_id: nil)
+    # Capture before skip_confirmation! sets confirmed_at, which would
+    # make oauth_user_needs_password_reset? return false and skip the
+    # password reset for persisted unconfirmed users.
+    needs_password_reset = oauth_user_needs_password_reset?
     @resource.skip_confirmation! if confirmable_enabled?
+    set_random_password_if_oauth_user if needs_password_reset
 
     # once the resource is found and verified
     # we can just send them to the login page again with the SSO params
     # that will log them in
     encoded_email = ERB::Util.url_encode(@resource.email)
-    redirect_to login_page_url(email: encoded_email, sso_auth_token: @resource.generate_sso_auth_token), allow_other_host: true
+    # allow_other_host (Vital's fork): FRONTEND_URL's host can differ from the host the callback arrived on
+    redirect_to login_page_url(
+      email: encoded_email,
+      sso_auth_token: @resource.generate_sso_auth_token,
+      redirect_url: redirect_url,
+      sso_account_id: sso_account_id
+    ), allow_other_host: true
+  end
+
+  def sign_in_user_on_mobile
+    # See comment in sign_in_user for why this is captured before skip_confirmation!
+    needs_password_reset = oauth_user_needs_password_reset?
+    @resource.skip_confirmation! if confirmable_enabled?
+    set_random_password_if_oauth_user if needs_password_reset
+
+    # once the resource is found and verified
+    # we can just send them to the login page again with the SSO params
+    # that will log them in
+    encoded_email = ERB::Util.url_encode(@resource.email)
+    params = { email: encoded_email, sso_auth_token: @resource.generate_sso_auth_token }.to_query
+
+    mobile_deep_link_base = GlobalConfigService.load('MOBILE_DEEP_LINK_BASE', 'chatwootapp')
+    redirect_to "#{mobile_deep_link_base}://auth/saml?#{params}", allow_other_host: true
   end
 
   def sign_up_user
     return redirect_to login_page_url(error: 'no-account-found'), allow_other_host: true unless account_signup_allowed?
-    return redirect_to login_page_url(error: 'business-account-only'), allow_other_host: true unless validate_signup_email_is_business_domain?
+
+    unless validate_signup_email_is_business_domain?
+      return redirect_to login_page_url(
+        error: 'business-account-only', redirect_url: oauth_redirect_url, sso_account_id: oauth_context['sso_account_id']
+      )
+    end
 
     create_account_for_user
-    # For OAuth users, redirect directly to login with SSO token (same as existing users)
-    encoded_email = ERB::Util.url_encode(@resource.email)
-    redirect_to login_page_url(email: encoded_email, sso_auth_token: @resource.generate_sso_auth_token), allow_other_host: true
+    set_random_password_if_oauth_user
+    token = @resource.send(:set_reset_password_token)
+    frontend_url = ENV.fetch('FRONTEND_URL', nil)
+    redirect_to "#{frontend_url}/app/auth/password/edit?config=default&reset_password_token=#{token}"
+  rescue Shopify::PendingInstallation::Error
+    redirect_to login_page_url(error: 'shopify-installation-failed')
   end
 
-  def login_page_url(error: nil, email: nil, sso_auth_token: nil)
-    frontend_url = ENV.fetch('FRONTEND_URL', nil)
-    params = { email: email, sso_auth_token: sso_auth_token }.compact
+  def login_page_url(error: nil, email: nil, sso_auth_token: nil, redirect_url: nil, sso_account_id: nil)
+    frontend_url = omniauth_frontend_url
+    params = { email: email, sso_auth_token: sso_auth_token, redirect_url: redirect_url, sso_account_id: sso_account_id }.compact
     params[:error] = error if error.present?
 
     "#{frontend_url}/app/login?#{params.to_query}"
   end
 
+  def omniauth_frontend_url
+    ENV.fetch('FRONTEND_URL', nil)
+  end
+
+  def oauth_redirect_url
+    oauth_context['redirect_url']
+  end
+
+  def oauth_context
+    @oauth_context ||= parse_google_oauth_context(params[:state].to_s)
+  end
+
+  def get_redirect_route(devise_mapping)
+    route = super
+    return route unless params[:provider] == 'google_oauth2' && oauth_context.present?
+
+    # Keep the continuation on this callback's redirect instead of sharing it across tabs in the session.
+    "#{route}?#{URI.encode_www_form(state: oauth_context.to_json)}"
+  end
+
+  def parse_google_oauth_context(state)
+    context = state.start_with?('{') ? JSON.parse(state) : { 'redirect_url' => state }
+    redirect_url = context['redirect_url']
+    context.delete('redirect_url') unless redirect_url.is_a?(String) && allowed_google_oauth_redirect?(redirect_url)
+    account_id = context['sso_account_id']
+    context.delete('sso_account_id') unless account_id.is_a?(String) && account_id.match?(/\A[1-9]\d*\z/)
+    context.slice('redirect_url', 'sso_account_id')
+  rescue JSON::ParserError
+    {}
+  end
+
+  def allowed_google_oauth_redirect?(redirect_url)
+    redirect_url == 'settings/integrations/shopify' || redirect_url.match?(SHOPIFY_INSTALL_REDIRECT_PATTERN)
+  end
+
   def account_signup_allowed?
-    # set it to true by default, this is the behaviour across the app
-    GlobalConfigService.load('ENABLE_ACCOUNT_SIGNUP', 'false') != 'false'
+    return true if GlobalConfigService.account_signup_enabled?
+
+    Shopify::FeatureGate.enabled? && Shopify::PendingInstallation.pending?(token: shopify_pending_install_token)
+  end
+
+  def shopify_pending_install_token
+    @shopify_pending_install_token ||= oauth_redirect_url&.match(SHOPIFY_INSTALL_REDIRECT_PATTERN)&.captures&.first
   end
 
   def resource_class(_mapping = nil)
     User
   end
 
-  # Make sure we have access to auth_hash
-  def auth_hash
-    request.env['omniauth.auth']
-  end
-
   def get_resource_from_auth_hash # rubocop:disable Naming/AccessorMethodName
-    # find the user with their email instead of UID and token
-    Rails.logger.info("Auth hash in get_resource_from_auth_hash: #{auth_hash.inspect}")
-    
-    # Safely access the email with checks to prevent nil errors
-    if auth_hash && auth_hash['info'] && auth_hash['info']['email'].present?
-      @resource = resource_class.where(
-        email: auth_hash['info']['email']
-      ).first
-    else
-      Rails.logger.error("Invalid auth_hash structure: #{auth_hash.inspect}")
-      nil
-    end
+    email = auth_hash.dig('info', 'email')
+    @resource = resource_class.from_email(email)
   end
 
   def validate_signup_email_is_business_domain?
     # return true if the user is a business account, false if it is a blocked domain account
-    if auth_hash && auth_hash['info'] && auth_hash['info']['email'].present?
-      Account::SignUpEmailValidationService.new(auth_hash['info']['email']).perform
-    else
-      Rails.logger.error("Missing email in auth_hash for validation: #{auth_hash.inspect}")
-      false
-    end
+    Account::SignUpEmailValidationService.new(auth_hash['info']['email']).perform
   rescue CustomExceptions::Account::InvalidEmail
     false
   end
 
   def create_account_for_user
-    if auth_hash && auth_hash['info'] && auth_hash['info']['email'].present?
-      email = auth_hash['info']['email']
-      name = auth_hash['info']['name'] || email.split('@').first
-      # Get email_verified from raw_info (JWT payload) instead of info hash
-    email_verified = auth_hash.dig('extra', 'raw_info', 'email_verified') || false
-      
-      @resource, @account = AccountBuilder.new(
-        account_name: email.split('@').last,
-        user_full_name: name,
-        email: email,
-        locale: I18n.locale,
-        confirmed: email_verified,
-        user_password: SecureRandom.alphanumeric(12) + "A1!"
-      ).perform
-      
-      if auth_hash['info']['image'].present?
-        Avatar::AvatarFromUrlJob.perform_later(@resource, auth_hash['info']['image'])
-      end
-    else
-      Rails.logger.error("Cannot create account: Missing info in auth_hash: #{auth_hash.inspect}")
-      nil
-    end
+    attributes = {
+      account_name: extract_domain_without_tld(auth_hash['info']['email']),
+      user_full_name: auth_hash['info']['name'],
+      email: auth_hash['info']['email'],
+      locale: I18n.locale,
+      confirmed: auth_hash['info']['email_verified']
+    }
+    pending_install_token = shopify_pending_install_token
+    attributes[:shopify_pending_install_token] = pending_install_token if pending_install_token
+
+    builder_class = pending_install_token.present? ? Shopify::SignupService : AccountBuilder
+    @resource, @account = builder_class.new(**attributes).perform
+    Avatar::AvatarFromUrlJob.perform_later(@resource, auth_hash['info']['image'])
+  end
+
+  def oauth_user_needs_password_reset?
+    @resource.present? && (@resource.new_record? || !@resource.confirmed?)
+  end
+
+  def set_random_password_if_oauth_user
+    # Password must satisfy secure_password requirements (uppercase, lowercase, number, special char)
+    @resource.update(password: "#{SecureRandom.hex(16)}aA1!") if @resource.persisted?
   end
 
   def default_devise_mapping
     'user'
   end
 end
+
+DeviseOverrides::OmniauthCallbacksController.prepend_mod_with('DeviseOverrides::OmniauthCallbacksController')

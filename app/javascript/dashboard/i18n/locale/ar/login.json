@@ -17,11 +17,26 @@
     },
     "OAUTH": {
       "GOOGLE_LOGIN": "تسجيل الدخول بواسطة جوجل",
-      "BUSINESS_ACCOUNTS_ONLY": "الرجاء استخدام عنوان البريد الإلكتروني الخاص بشركتك لتسجيل الدخول",
-      "NO_ACCOUNT_FOUND": "لم نتمكن من العثور على حساب لعنوان البريد الإلكتروني الخاص بك."
+      "BUSINESS_ACCOUNTS_ONLY": "You can't create a new account with a personal email address. Please sign up using your work email.",
+      "NO_ACCOUNT_FOUND": "لم نتمكن من العثور على حساب لعنوان البريد الإلكتروني الخاص بك.",
+      "SHOPIFY_INSTALLATION_FAILED": "We couldn't complete your Shopify installation. Please restart installation from Shopify."
     },
     "FORGOT_PASSWORD": "نسيت كلمة المرور؟",
     "CREATE_NEW_ACCOUNT": "إنشاء حساب جديد",
-    "SUBMIT": "تسجيل الدخول"
+    "SUBMIT": "تسجيل الدخول",
+    "SAML": {
+      "LABEL": "Login via SSO",
+      "TITLE": "Initiate Single Sign-on (SSO)",
+      "SUBTITLE": "Enter your work email to access your organization",
+      "BACK_TO_LOGIN": "Login via Password",
+      "WORK_EMAIL": {
+        "LABEL": "Work Email",
+        "PLACEHOLDER": "Enter your work email"
+      },
+      "SUBMIT": "Continue with SSO",
+      "API": {
+        "ERROR_MESSAGE": "SSO authentication failed. Please check your credentials and try again."
+      }
+    }
   }
 }

@@ -1,8 +1,8 @@
 {
   "SURVEY": {
-    "DESCRIPTION": "לקוח יקר 👋, אנא הקדישו כמה רגעים כדי לשתף משוב על השיחה שניהלתם עם {inboxName}.",
+    "DESCRIPTION": "לקוח יקר 👋, אנא הקדש כמה רגעים כדי לשתף משוב על השיחה שניהלת עם {inboxName}.",
     "RATING": {
-      "LABEL": "דרג את השיחה",
+      "LABEL": "דרג את השיחה שלך",
       "SUCCESS_MESSAGE": "תודה על שליחת הדירוג"
     },
     "FEEDBACK": {
@@ -15,5 +15,5 @@
       "ERROR_MESSAGE": "לא ניתן להתחבר לשרת Woot, נסה שוב מאוחר יותר"
     }
   },
-  "POWERED_BY": ""
+  "POWERED_BY": "מופעל על ידי Chatwoot"
 }

@@ -12,15 +12,26 @@
       "ERROR_MESSAGE": "Nu s-a putut trimite! Încearcă din nou"
     }
   },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Not available"
+    }
+  },
   "TEAM_AVAILABILITY": {
     "ONLINE": "Suntem online",
-    "OFFLINE": "Suntem plecați în acest moment"
+    "OFFLINE": "Suntem plecați în acest moment",
+    "BACK_AS_SOON_AS_POSSIBLE": "We will be back as soon as possible"
   },
   "REPLY_TIME": {
     "IN_A_FEW_MINUTES": "De obicei, răspunsurile în câteva minute",
     "IN_A_FEW_HOURS": "De obicei, răspunsurile în câteva ore",
     "IN_A_DAY": "De obicei, răspunsurile într-o zi",
-    "BACK_IN": "Vom reveni online"
+    "BACK_IN_HOURS": "We will be back online in {n} hour | We will be back online in {n} hours",
+    "BACK_IN_MINUTES": "We will be back online in {time} minutes",
+    "BACK_AT_TIME": "We will be back online at {time}",
+    "BACK_ON_DAY": "We will be back online on {day}",
+    "BACK_TOMORROW": "We will be back online tomorrow",
+    "BACK_IN_SOME_TIME": "We will be back online in some time"
   },
   "DAY_NAMES": {
     "SUNDAY": "Duminică",
@@ -46,8 +57,11 @@
   "BUBBLE": {
     "LABEL": "Discută cu noi"
   },
-  "POWERED_BY": "",
+  "POWERED_BY": "Oferit de Chatwoot",
   "EMAIL_PLACEHOLDER": "Te rugăm să introduci adresa de e-mail",
+  "TRANSLATING": "Translating",
+  "VIEW_ORIGINAL": "View original",
+  "VIEW_TRANSLATION": "View translation",
   "CHAT_PLACEHOLDER": "Scrie mesajul tău",
   "TODAY": "Astăzi",
   "YESTERDAY": "Ieri",
@@ -94,6 +108,11 @@
     "PLACEHOLDER": "Caută emoji-uri",
     "NOT_FOUND": "Niciun emoji nu corespunde căutării tale",
     "ARIA_LABEL": "Emoji picker"
+  },
+  "EMOJI_ICON_PICKER": {
+    "SEARCH_EMOJI": "Search emoji…",
+    "FREQUENTLY_USED": "Frequently used",
+    "NO_EMOJI": "Niciun emoji nu corespunde căutării tale"
   },
   "CSAT": {
     "TITLE": "Evaluează conversația ta",

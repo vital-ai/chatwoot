@@ -93,9 +93,24 @@ RSpec.describe 'Custom Filters API', type: :request do
         expect(json_response['name']).to eq 'vip-customers'
       end
 
-      it 'gives the error for 51st record' do
+      it 'rejects a date condition with an invalid timezone' do
+        payload[:custom_filter][:query][:payload] = [{
+          values: ['2026-09-08'], attribute_key: 'created_at', attribute_model: 'standard',
+          filter_operator: 'is_less_than', timezone: 'Invalid/Timezone'
+        }]
+
+        expect do
+          post "/api/v1/accounts/#{account.id}/custom_filters", headers: user.create_new_auth_token,
+                                                                params: payload,
+                                                                as: :json
+        end.not_to change(CustomFilter, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
+      end
+
+      it 'gives the error for 1001st record' do
         CustomFilter.delete_all
-        CustomFilter::MAX_FILTER_PER_USER.times do
+        Limits::MAX_CUSTOM_FILTERS_PER_USER.times do
           create(:custom_filter, user: user, account: account)
         end
 
@@ -107,7 +122,7 @@ RSpec.describe 'Custom Filters API', type: :request do
         expect(response).to have_http_status(:unprocessable_entity)
         json_response = response.parsed_body
         expect(json_response['message']).to include(
-          'Account Limit reached. The maximum number of allowed custom filters for a user per account is 50.'
+          'Account Limit reached. The maximum number of allowed custom filters for a user per account is 1000.'
         )
       end
     end
@@ -143,6 +158,21 @@ RSpec.describe 'Custom Filters API', type: :request do
         expect(custom_filter.reload.name).to eq('vip-customers')
         expect(custom_filter.reload.filter_type).to eq('conversation')
         expect(custom_filter.reload.query['payload'][0]['values']).to eq(['resolved'])
+      end
+
+      it 'rejects a date condition with an invalid timezone' do
+        payload[:custom_filter][:query][:payload] = [{
+          values: [1], attribute_key: 'created_at', attribute_model: 'standard',
+          filter_operator: 'days_before', timezone: 'Invalid/Timezone'
+        }]
+
+        patch "/api/v1/accounts/#{account.id}/custom_filters/#{custom_filter.id}",
+              headers: user.create_new_auth_token,
+              params: payload,
+              as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(custom_filter.reload.query['payload'][0]['values']).to eq(['open'])
       end
 
       it 'prevents the update of custom filter of another user/account' do
