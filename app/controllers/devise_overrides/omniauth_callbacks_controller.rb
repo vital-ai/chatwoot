@@ -3,14 +3,6 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
 
   SHOPIFY_INSTALL_REDIRECT_PATTERN = %r{\Asettings/integrations/shopify\?shopify_pending_install=([0-9a-f]{32})\z}
 
-  # Vital's fork: staff sign in with Keycloak (planning_vital_ai_api/14 §12a, 15 §3c). OmniAuth's keycloak strategy
-  # hands its callback here; without an auth hash (a failed code exchange) it goes back to the login page.
-  def keycloak
-    return redirect_to login_page_url(error: 'keycloak-auth-error'), allow_other_host: true if auth_hash.blank?
-
-    omniauth_success
-  end
-
   def omniauth_success
     get_resource_from_auth_hash
 
@@ -129,6 +121,13 @@ class DeviseOverrides::OmniauthCallbacksController < DeviseTokenAuth::OmniauthCa
 
   def resource_class(_mapping = nil)
     User
+  end
+
+  # Vital's fork: Keycloak's callback (/auth/keycloak/callback) comes straight from OmniAuth, without
+  # devise_token_auth's redirect that keeps the result in the session, so the result is read from the request too
+  # (planning_vital_ai_api/14 §12a, 15 §3c). Google's way is unchanged.
+  def auth_hash
+    @_auth_hash ||= session.delete('dta.omniauth.auth') || request.env['omniauth.auth']
   end
 
   def get_resource_from_auth_hash # rubocop:disable Naming/AccessorMethodName
