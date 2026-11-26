@@ -14,13 +14,11 @@ export const replaceChatwootName = text => {
 
 export const postTranslation = str => replaceChatwootName(str);
 
-// Upstream's own test for a custom-branded installation (globalConfig/isACustomBrandedInstance), usable before the
-// store exists. Provisioning sets our INSTALLATION_NAME, so this is true on every Vital installation.
-export const isCustomBranded = () => {
-  const name = window.globalConfig?.INSTALLATION_NAME;
-  return Boolean(name) && name.toLowerCase() !== 'chatwoot';
-};
+// Vital's fork is always a custom-branded installation (shared/store/globalConfig.js isACustomBrandedInstance),
+// whatever its INSTALLATION_NAME: usable before the store exists.
+export const isCustomBranded = () => true;
 
-// A link to Chatwoot's site, or '' on a custom-branded installation. Links left empty are hidden by the layout
-// (a[href=""] in vueapp.html.erb), and code that opens or fetches one checks for ''.
+// A link to Chatwoot's site: always '' in Vital's fork (owner, 2026-11-26: no links to Chatwoot's site). Empty links
+// are hidden by the layout (a[href=""] in vueapp.html.erb), and code that opens or fetches one checks for ''.
+// The URL stays in the call so it's clear what was removed.
 export const chatwootLink = url => (isCustomBranded() ? '' : url);

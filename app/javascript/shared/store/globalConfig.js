@@ -72,7 +72,10 @@ export const getters = {
     $state.deploymentEnv === 'cloud' && $state.disableMetaInboxCreation,
   isMetaMessageSendingDisabled: $state =>
     $state.deploymentEnv === 'cloud' && $state.disableMetaMessageSending,
-  isACustomBrandedInstance: $state => $state.installationName !== 'Chatwoot',
+  // Vital's fork: always custom-branded, whatever INSTALLATION_NAME is (owner, 2026-11-26: the name and logo stay
+  // Chatwoot's). Upstream uses this to leave out links to Chatwoot's site, its changelog, upsells and paywalls
+  // (planning_vital_ai_api/15 §3b).
+  isACustomBrandedInstance: () => true,
   isAChatwootInstance: $state => $state.installationName === 'Chatwoot',
 };
 

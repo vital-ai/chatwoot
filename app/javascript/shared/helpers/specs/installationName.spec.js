@@ -1,4 +1,4 @@
-import { replaceChatwootName } from '../installationName';
+import { chatwootLink, replaceChatwootName } from '../installationName';
 
 describe('replaceChatwootName', () => {
   afterEach(() => {
@@ -25,5 +25,13 @@ describe('replaceChatwootName', () => {
     window.globalConfig = { INSTALLATION_NAME: 'starsign' };
     const vnode = { type: 'span' };
     expect(replaceChatwootName(vnode)).toBe(vnode);
+  });
+});
+
+describe('chatwootLink', () => {
+  it('always empties a link to Chatwoot in the fork', () => {
+    window.globalConfig = { INSTALLATION_NAME: 'Chatwoot' };
+    expect(chatwootLink('https://www.chatwoot.com/docs')).toBe('');
+    delete window.globalConfig;
   });
 });
