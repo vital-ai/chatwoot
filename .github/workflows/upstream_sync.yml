@@ -1,0 +1,32 @@
+name: Upstream sync
+
+# Keeps develop, master and the v* release tags in step with chatwoot/chatwoot.
+# Never touches vital/ branches, vital-keycloak-sso, vital-keycloak-auth or this branch (see README.md).
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fork-sync
+          persist-credentials: false
+      - name: Sync develop, master and release tags from upstream
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          FORK_REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then echo "::error::secret UPSTREAM_SYNC_TOKEN is not set"; exit 1; fi
+          ./upstream_sync.sh
