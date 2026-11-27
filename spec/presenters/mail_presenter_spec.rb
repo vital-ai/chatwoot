@@ -81,6 +81,28 @@ RSpec.describe MailPresenter do
       )
     end
 
+    it 'includes the headers that judge the sender: SPF, DKIM, lists (Vital)' do
+      judged = Mail.new do
+        from 'Sender <sender@example.com>'
+        to 'Inbox <inbox@example.com>'
+        subject :header
+        body 'Hi'
+        header['X-Mailgun-Spf'] = 'Pass'
+        header['X-Mailgun-Dkim-Check-Result'] = 'Fail'
+        header['Authentication-Results'] = 'mx.example; spf=pass smtp.mailfrom=example.com; dkim=fail'
+        header['List-Id'] = 'News <news.example.com>'
+        header['Precedence'] = 'bulk'
+      end
+
+      expect(described_class.new(judged).serialized_data[:headers]).to eq(
+        'x-mailgun-spf' => 'Pass',
+        'x-mailgun-dkim-check-result' => 'Fail',
+        'authentication-results' => 'mx.example; spf=pass smtp.mailfrom=example.com; dkim=fail',
+        'list-id' => 'News <news.example.com>',
+        'precedence' => 'bulk'
+      )
+    end
+
     it 'returns nil headers when forwarding headers are missing' do
       mail_without_headers = Mail.new do
         from 'Sender <sender@example.com>'

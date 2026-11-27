@@ -142,14 +142,31 @@ class MailPresenter < SimpleDelegator
     ].filter_map { |email| parse_mail_address(email)&.address }.first
   end
 
+  # Vital: also the headers a receiver of our webhooks needs to judge the mail (planning_vital_ai_api/16 §5): whether
+  # the sender passed SPF and DKIM as the receiving service checked them (Mailgun's X-Mailgun-Spf and
+  # X-Mailgun-Dkim-Check-Result; Authentication-Results, RFC 8601), and whether it's list or bulk mail (List-Id,
+  # Precedence). Each value at most 1,000 characters.
+  VITAL_JUDGING_HEADERS = {
+    'x-mailgun-spf' => 'X-Mailgun-Spf',
+    'x-mailgun-dkim-check-result' => 'X-Mailgun-Dkim-Check-Result',
+    'authentication-results' => 'Authentication-Results',
+    'list-id' => 'List-Id',
+    'list-unsubscribe' => 'List-Unsubscribe',
+    'precedence' => 'Precedence'
+  }.freeze
+
   def headers_data
     headers = {
       'x-original-from' => @mail['X-Original-From']&.value,
       'x-original-sender' => @mail['X-Original-Sender']&.value,
       'x-forwarded-for' => @mail['X-Forwarded-For']&.value
-    }.compact
+    }
+    VITAL_JUDGING_HEADERS.each do |key, name|
+      value = Array(@mail[name]).first&.value
+      headers[key] = value.to_s[0, 1000] if value.present?
+    end
 
-    headers.presence
+    headers.compact.presence
   end
 
   def email_forwarded_for
